@@ -128,6 +128,16 @@ public class JarvisAccessibility extends AccessibilityService {
         return null;
     }
 
+    String paste() {
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null) return "Cannot read the screen right now.";
+        AccessibilityNodeInfo field = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
+        if (field == null || !field.isEditable()) field = findEditable(root, 0);
+        if (field == null) return "Nothing on screen accepts text. Tap a text field first.";
+        field.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+        return field.performAction(AccessibilityNodeInfo.ACTION_PASTE) ? "Pasted." : "Cannot paste here.";
+    }
+
     // ------------------------------------------------------------------ scroll
 
     String scroll(boolean down) {

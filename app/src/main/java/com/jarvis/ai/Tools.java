@@ -4,6 +4,8 @@ import android.accessibilityservice.AccessibilityService;
 import android.app.KeyguardManager;
 import android.app.SearchManager;
 import android.content.ActivityNotFoundException;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -58,7 +60,7 @@ final class Tools {
 
     private static final Set<String> SENSITIVE = new HashSet<>(Arrays.asList(
             "call_contact", "send_sms", "whatsapp_message", "compose_email",
-            "unlock_phone", "tap_text", "type_text", "read_screen"));
+            "unlock_phone", "tap_text", "type_text", "read_screen", "write_code", "paste", "read_notifications"));
 
     private static final String A11Y_OFF =
             "Accessibility service is not enabled. Ask the user to enable Jarvis in Settings, Accessibility.";
@@ -169,6 +171,13 @@ final class Tools {
         a.put(fn("scroll", "Scroll the current screen.",
                 J.obj("direction", en("Direction", "down", "up")), "direction"));
         a.put(fn("read_screen", "Read the text currently visible on screen.", null));
+        a.put(fn("write_code", "Write code into a code or notes app on the phone: copies it to the clipboard, opens the app, then types or pastes it. Use this whenever the user asks you to write code.",
+                J.obj("code", s("The complete code"),
+                        "app", s("App name such as Pyroid or Notepad. Leave empty for the user's default code app."))
+                , "code"));
+        a.put(fn("copy_text", "Copy text to the clipboard.", J.obj("text", s("Text to copy")), "text"));
+        a.put(fn("paste", "Paste the clipboard into the text field on screen.", null));
+        a.put(fn("read_notifications", "Read the notifications currently showing on the phone.", null));
         a.put(fn("end_conversation", "Call when the user is finished and no further listening is needed.", null));
         return a;
     }
@@ -348,12 +357,51 @@ final class Tools {
                 JarvisAccessibility svc = JarvisAccessibility.get();
                 return svc == null ? A11Y_OFF : svc.read();
             }
+            case "write_code":
+                return writeCode(a.optString("code"), a.optString("app").trim());
+            case "copy_text":
+                copy(a.optString("text"));
+                return "Copied to the clipboard.";
+            case "paste": {
+                JarvisAccessibility svc = JarvisAccessibility.get();
+                return svc == null ? A11Y_OFF : svc.paste();
+            }
+            case "read_notifications": {
+                JarvisNotifications ns = JarvisNotifications.get();
+                return ns == null
+                        ? "Notification access is not enabled. Ask the user to enable Jarvis in Settings, Notification access."
+                        : ns.recent();
+            }
             case "end_conversation":
                 endRequested = true;
                 return "Conversation ended.";
             default:
                 return "Unknown tool: " + name;
         }
+    }
+
+    private void copy(String text) {
+        ClipboardManager cm = (ClipboardManager) c.getSystemService(Context.CLIPBOARD_SERVICE);
+        cm.setPrimaryClip(ClipData.newPlainText("jarvis", text));
+    }
+
+    private String writeCode(String code, String app) throws Exception {
+        if (code.isEmpty()) return "No code was given.";
+        String target = app.isEmpty() ? prefs.codeApp() : app;
+        copy(code);
+        String opened = openApp(target);
+        if (opened.startsWith("No ")) return "The code is copied to the clipboard, but " + opened;
+        Thread.sleep(2500);
+        JarvisAccessibility svc = JarvisAccessibility.get();
+        if (svc == null) {
+            return "The code is copied and " + target + " is open. " + A11Y_OFF + " For now the user can paste it.";
+        }
+        String typed = svc.type(code);
+        if (typed.startsWith("Typed")) return "Code written into " + target + ".";
+        String pasted = svc.paste();
+        if (pasted.startsWith("Pasted")) return "Code pasted into " + target + ".";
+        return "The code is copied to the clipboard and " + target + " is open, but I could not place it automatically ("
+                + typed + "). Use read_screen and tap_text to open a new file or tap the editor, then call paste.";
     }
 
     private String unlockPhone() {

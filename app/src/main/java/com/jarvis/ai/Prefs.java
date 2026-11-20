@@ -36,6 +36,7 @@ final class Prefs {
 
     // ---- owner lock ----
 
+    String codeApp() { String a = sp.getString("codeApp", "Pyroid").trim(); return a.isEmpty() ? "Pyroid" : a; }
     String ownerName() { return sp.getString("owner", "Shudhanshu").trim(); }
     boolean lockOn() { return sp.getBoolean("lock", true); }
     boolean lock() { return lockOn(); }

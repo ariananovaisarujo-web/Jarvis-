@@ -36,7 +36,7 @@ public class SettingsActivity extends Activity {
     private EditText key, model, name, city, cc, elevenKey, elevenVoice, elevenModel;
     private Spinner sttLang, ttsLang;
     private Switch wakeSw, convSw, lockSw;
-    private EditText owner, passphrase;
+    private EditText owner, passphrase, codeApp;
     private SeekBar rate, pitch;
 
     @Override
@@ -65,6 +65,8 @@ public class SettingsActivity extends Activity {
         name = field("What should I call you?", prefs.name(), false);
         city = field("Home city (for weather)", prefs.city(), false);
         cc = field("Country code for WhatsApp numbers (e.g. 91)", prefs.countryCode(), false);
+
+        codeApp = field("Code app for 'write code' (app name, e.g. Pyroid or Notepad)", prefs.codeApp(), false);
 
         header("VOICE");
         sttLang = spinner("I listen in", STT, prefs.sttLang());
@@ -146,6 +148,8 @@ public class SettingsActivity extends Activity {
                     Uri.parse("package:" + getPackageName()));
             startActivity(in);
         }));
+        add(button("Allow Jarvis to read notifications",
+                v -> startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))));
         col.addView(label("If Android says the setting is restricted: open app info, tap the 3 dots, "
                 + "choose Allow restricted settings, then turn on Jarvis in Accessibility.", 12, DIM));
         col.addView(label("Offline use: in the Google app open Settings, Voice, Offline speech recognition and "
@@ -192,6 +196,7 @@ public class SettingsActivity extends Activity {
         prefs.setString("elevenModel", em.isEmpty() ? "eleven_flash_v2_5" : em);
         prefs.setBool("conv", convSw.isChecked());
         prefs.setBool("lock", lockSw.isChecked());
+        prefs.setString("codeApp", codeApp.getText().toString().trim());
         String on = owner.getText().toString().trim();
         prefs.setString("owner", on.isEmpty() ? "Shudhanshu" : on);
         String ph = passphrase.getText().toString().trim();
