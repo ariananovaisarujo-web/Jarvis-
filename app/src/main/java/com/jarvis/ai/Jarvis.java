@@ -86,6 +86,9 @@ final class Jarvis {
         tts = new Tts(c, prefs);
         tts.notice = msg -> log("system", msg);
         tools.gate = () -> System.currentTimeMillis() < authUntil;
+        tools.searcher = new Tools.Searcher() {
+            @Override public String search(String query) throws Exception { return gemini.searchWeb(query); }
+        };
     }
 
     // ------------------------------------------------------------------ public API (any thread)
