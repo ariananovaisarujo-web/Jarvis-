@@ -111,7 +111,7 @@ final class Tts {
             if (onDone != null) onDone.run();
             return;
         }
-        if (prefs.elevenOn()) speakEleven(text, onDone);
+        if (prefs.elevenOn() && Net.online(ctx)) speakEleven(text, onDone);
         else speakSystem(text, onDone, 0);
     }
 

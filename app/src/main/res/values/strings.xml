@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Jarvis</string>
+    <string name="a11y_desc">Lets Jarvis press Home and Back, tap buttons, type, scroll and read the screen when you ask it to.</string>
 </resources>

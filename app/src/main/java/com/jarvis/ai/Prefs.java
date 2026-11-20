@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 
 import org.json.JSONArray;
 
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -32,6 +33,45 @@ final class Prefs {
     String elevenVoice() { return sp.getString("elevenVoice", "").trim(); }
     String elevenModel() { return sp.getString("elevenModel", "eleven_flash_v2_5").trim(); }
     boolean elevenOn() { return !elevenKey().isEmpty() && !elevenVoice().isEmpty(); }
+
+    // ---- owner lock ----
+
+    String ownerName() { return sp.getString("owner", "Shudhanshu").trim(); }
+    boolean lockOn() { return sp.getBoolean("lock", true); }
+    boolean lock() { return lockOn(); }
+    boolean passSet() { return sp.getInt("passLen", 0) > 0 && !sp.getString("passHash", "").isEmpty(); }
+
+    private static String normPass(String s) {
+        return s.toLowerCase(Locale.ROOT).replaceAll("[^\\p{L}\\p{N}]", "");
+    }
+
+    private static String sha(String s) {
+        try {
+            byte[] d = MessageDigest.getInstance("SHA-256").digest(s.getBytes("UTF-8"));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : d) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    void setPass(String phrase) {
+        String n = normPass(phrase);
+        sp.edit().putInt("passLen", n.length()).putString("passHash", n.isEmpty() ? "" : sha(n)).apply();
+    }
+
+    /** True if the spoken text contains the owner's passphrase. */
+    boolean checkPass(String spoken) {
+        if (!passSet()) return false;
+        String n = normPass(spoken);
+        int len = sp.getInt("passLen", 0);
+        String want = sp.getString("passHash", "");
+        for (int i = 0; i + len <= n.length(); i++) {
+            if (sha(n.substring(i, i + len)).equals(want)) return true;
+        }
+        return false;
+    }
 
     void setString(String k, String v) { sp.edit().putString(k, v).apply(); }
     void setBool(String k, boolean v) { sp.edit().putBoolean(k, v).apply(); }

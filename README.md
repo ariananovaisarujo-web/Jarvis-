@@ -13,6 +13,17 @@ Iron-Man style voice assistant. Gemini is the brain, your phone is the body.
   open links, weather, battery, time, open settings pages, camera, email draft
 - Long-term memory ("remember that I like ...")
 
+## Works offline, works with the screen off
+- Common commands are understood on the phone itself (torch, volume, apps, calls, alarms, timers, home/back, unlock...), so they work with no internet. Needs the Google offline voice packs (Google app, Settings, Voice, Offline speech recognition).
+- Anything that needs the internet (chat, weather, complex tasks) makes Jarvis say "net on kar dijiye".
+- "Jarvis phone open karo" wakes the screen and unlocks. With a PIN/pattern, Android shows its prompt and you enter it (automatic PIN entry is NOT built, on purpose, until real voice-ID exists).
+
+## Owner lock
+Protected actions (unlock, call, SMS, WhatsApp, email, tap/type/read screen) ask for your spoken passphrase (checked on the phone, kept as a hash). Anyone else is told to get permission from the owner. This is a passphrase, not voice-ID.
+
+## Full phone control
+Turn on Jarvis in Android Accessibility: then Jarvis can press Home/Back, open notifications, tap by label, type, scroll and read the screen.
+
 ## Build the APK (GitHub Actions)
 1. Create a new GitHub repo (public = unlimited free build minutes) and push this folder.
 2. Open the Actions tab, run "Build Jarvis APK" (it also runs on every push).
@@ -29,5 +40,4 @@ Iron-Man style voice assistant. Gemini is the brain, your phone is the body.
 - Needs internet (Gemini + Google speech recognition).
 - Wake word uses Google's recogniser in a loop: some phones beep, and it can pause music while listening.
 - Android does not let apps toggle Wi-Fi / Bluetooth / mobile data directly; Jarvis opens the right settings page.
-- Reading screen, tapping other apps, reading notifications, camera vision are NOT in v1
-  (planned: AccessibilityService, NotificationListener, camera + Gemini vision).
+- Not built yet: real voice-ID (only the owner's voice), automatic PIN entry, notification reading, camera vision.

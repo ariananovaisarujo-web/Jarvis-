@@ -56,10 +56,19 @@ final class Jarvis {
     private final List<Listener> listeners = new CopyOnWriteArrayList<>();
     private final List<String[]> history = new ArrayList<>();
 
+    private final LocalBrain local = new LocalBrain();
+
     private State state = State.IDLE;
     private boolean wakeEnabled;
     private boolean wakeListening;
     private int gen;
+
+    // owner lock
+    private volatile long authUntil;
+    private boolean awaitingPass;
+    private long passDeadline;
+    private String lastText;
+    private String pendingText;
 
     private final Runnable wakeRun = new Runnable() {
         @Override
@@ -76,6 +85,7 @@ final class Jarvis {
         stt = new Stt(c);
         tts = new Tts(c, prefs);
         tts.notice = msg -> log("system", msg);
+        tools.gate = () -> System.currentTimeMillis() < authUntil;
     }
 
     // ------------------------------------------------------------------ public API (any thread)
@@ -167,6 +177,7 @@ final class Jarvis {
 
     private void stopNow() {
         gen++;
+        awaitingPass = false;
         stt.cancel();
         tts.stop();
         wakeListening = false;
@@ -200,7 +211,7 @@ final class Jarvis {
             setState(State.LISTENING);
         }
         wakeListening = wake;
-        stt.start(prefs.sttLang(), wake, !wake, new Stt.Cb() {
+        stt.start(prefs.sttLang(), wake || !Net.online(ctx), !wake, new Stt.Cb() {
             @Override
             public void onRms(float db) {
                 if (!wake) for (Listener l : listeners) l.onLevel(db);
@@ -283,7 +294,12 @@ final class Jarvis {
             if (quiet) log("system", "I didn't catch that.");
             else if (code == -1) log("system", "Speech recognition isn't available. Install or enable the Google app.");
             else if (code == SpeechRecognizer.ERROR_NETWORK || code == SpeechRecognizer.ERROR_NETWORK_TIMEOUT
-                    || code == SpeechRecognizer.ERROR_SERVER) log("system", "Speech recognition needs an internet connection.");
+                    || code == SpeechRecognizer.ERROR_SERVER || code == 12 || code == 13) {
+                log("system", Net.online(ctx)
+                        ? "Speech recognition could not reach Google."
+                        : "No internet and no offline voice pack. In the Google app, open Settings, Voice, "
+                        + "Offline speech recognition, and download English and Hindi.");
+            }
             else log("system", "Speech recognition error " + code + ".");
         }
         toIdle();
@@ -294,12 +310,30 @@ final class Jarvis {
         stt.cancel();
         tts.stop();
         wakeListening = false;
+
+        // The next sentence after "say your passphrase" is checked locally, never sent to Gemini.
+        if (awaitingPass && System.currentTimeMillis() < passDeadline) {
+            awaitingPass = false;
+            final String orig = pendingText;
+            pendingText = null;
+            log("you", "(passphrase)");
+            if (orig != null && prefs.checkPass(text)) {
+                authUntil = System.currentTimeMillis() + 10 * 60 * 1000L;
+                handle(orig, voice);
+            } else {
+                denied(my);
+            }
+            return;
+        }
+        awaitingPass = false;
+
+        lastText = text;
         log("you", text);
         setState(State.THINKING);
         bg.execute(new Runnable() {
             @Override
             public void run() {
-                final Gemini.Result r = gemini.ask(text);
+                final Gemini.Result r = think(text);
                 main.post(new Runnable() {
                     @Override public void run() { onReply(r, voice, my); }
                 });
@@ -307,9 +341,47 @@ final class Jarvis {
         });
     }
 
+    /** Offline-capable commands first, then Gemini when online. Runs on the background thread. */
+    private Gemini.Result think(String text) {
+        Gemini.Result r = new Gemini.Result();
+        LocalBrain.Match m = local.match(text, prefs.name());
+        if (m != null) {
+            String out = tools.execute(m.tool, m.args);
+            if (out.startsWith("BLOCKED")) {
+                r.text = out.contains("no owner passphrase")
+                        ? "Pehle Settings me owner passphrase set kijiye."
+                        : "Passphrase boliye.";
+            } else if (m.speakResult || LocalBrain.looksFailed(out)) {
+                r.text = out;
+            } else {
+                r.text = m.say;
+            }
+            return r;
+        }
+        if (!Net.online(ctx)) {
+            r.text = "Sir, is kaam ke liye internet chahiye. Net on kar dijiye, phir main kar dunga.";
+            return r;
+        }
+        return gemini.ask(text);
+    }
+
+    private void denied(final int my) {
+        String msg = "यह " + prefs.ownerName() + " का फोन है। पहले उनसे इजाज़त लेकर आइए।";
+        log("system", msg);
+        setState(State.SPEAKING);
+        tts.speak(msg, new Runnable() {
+            @Override public void run() { if (my == gen) toIdle(); }
+        });
+    }
+
     private void onReply(Gemini.Result r, final boolean voice, final int my) {
         if (my != gen) return;
         final boolean end = tools.consumeEnd();
+        if (tools.consumeAuth()) {
+            awaitingPass = true;
+            pendingText = lastText;
+            passDeadline = System.currentTimeMillis() + 60000L;
+        }
         if (r.error != null) {
             log("system", r.error);
             setState(State.SPEAKING);

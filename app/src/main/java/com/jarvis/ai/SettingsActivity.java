@@ -35,7 +35,8 @@ public class SettingsActivity extends Activity {
     private LinearLayout col;
     private EditText key, model, name, city, cc, elevenKey, elevenVoice, elevenModel;
     private Spinner sttLang, ttsLang;
-    private Switch wakeSw, convSw;
+    private Switch wakeSw, convSw, lockSw;
+    private EditText owner, passphrase;
     private SeekBar rate, pitch;
 
     @Override
@@ -79,6 +80,17 @@ public class SettingsActivity extends Activity {
                 prefs.elevenModel(), false);
         col.addView(label("When both key and voice ID are filled, I speak with ElevenLabs. "
                 + "Leave them empty to use the phone's own voice. Each reply uses your ElevenLabs credits.", 12, DIM));
+
+        header("OWNER LOCK");
+        lockSw = toggle("Protect sensitive actions (unlock, call, SMS, WhatsApp, email, screen control)", prefs.lock());
+        owner = field("Owner name (shown to strangers)", prefs.ownerName(), false);
+        passphrase = field(prefs.passSet()
+                ? "New passphrase (a phrase only you know; leave empty to keep the current one)"
+                : "Set your passphrase (a phrase only you know, 2 to 4 words). Required to use protected actions.",
+                "", true);
+        col.addView(label("When a protected action is asked, Jarvis asks for the passphrase and checks it on the phone "
+                + "(it is never sent to the internet). After you say it once, it stays unlocked for 10 minutes. "
+                + "Anyone who does not know it is told to get permission from the owner.", 12, DIM));
 
         header("ALWAYS ON");
         wakeSw = toggle("Wake word: say \"Jarvis\" any time", prefs.wake());
@@ -126,6 +138,19 @@ public class SettingsActivity extends Activity {
             }
         }));
 
+        header("FULL PHONE CONTROL");
+        add(button("Turn on Jarvis accessibility (tap, type, home, back, read screen)",
+                v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))));
+        add(button("Allow restricted settings (open app info, menu with 3 dots)", v -> {
+            Intent in = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:" + getPackageName()));
+            startActivity(in);
+        }));
+        col.addView(label("If Android says the setting is restricted: open app info, tap the 3 dots, "
+                + "choose Allow restricted settings, then turn on Jarvis in Accessibility.", 12, DIM));
+        col.addView(label("Offline use: in the Google app open Settings, Voice, Offline speech recognition and "
+                + "download English and Hindi. Simple commands then work with no internet.", 12, DIM));
+
         header("ACTIONS");
         add(button("Save and test voice", v -> {
             save();
@@ -166,6 +191,14 @@ public class SettingsActivity extends Activity {
         String em = elevenModel.getText().toString().trim();
         prefs.setString("elevenModel", em.isEmpty() ? "eleven_flash_v2_5" : em);
         prefs.setBool("conv", convSw.isChecked());
+        prefs.setBool("lock", lockSw.isChecked());
+        String on = owner.getText().toString().trim();
+        prefs.setString("owner", on.isEmpty() ? "Shudhanshu" : on);
+        String ph = passphrase.getText().toString().trim();
+        if (!ph.isEmpty()) {
+            prefs.setPass(ph);
+            passphrase.setText("");
+        }
         prefs.setFloat("rate", 0.5f + rate.getProgress() / 100f);
         prefs.setFloat("pitch", 0.5f + pitch.getProgress() / 100f);
     }

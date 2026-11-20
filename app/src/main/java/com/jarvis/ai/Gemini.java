@@ -48,7 +48,7 @@ final class Gemini {
         trim();
 
         String lastText = "";
-        for (int step = 0; step < 8; step++) {
+        for (int step = 0; step < 12; step++) {
             JSONObject req = J.obj(
                     "systemInstruction", J.obj("parts", J.arr(J.obj("text", systemPrompt()))),
                     "contents", contents,
@@ -64,7 +64,7 @@ final class Gemini {
                 return res;
             } catch (Exception e) {
                 truncate(mark);
-                res.error = "I can't reach my servers, sir. Please check the internet connection.";
+                res.error = "Sir, internet nahi chal raha. Net on kar dijiye, phir main kar dunga.";
                 return res;
             }
 
@@ -217,6 +217,8 @@ final class Gemini {
         sb.append("If a contact or app is ambiguous, ask one short clarifying question before acting. ");
         sb.append("When the user says goodbye, says thanks that is all, or says stop / bas / ruko, call end_conversation. ");
         sb.append("When the user shares a lasting personal fact or preference, call remember. ");
+        sb.append("To operate other apps: use open_app, then read_screen to see what is displayed, then tap_text, type_text and scroll step by step, reading the screen again to confirm each result. Never enter passwords, OTPs or payment details yourself; ask the owner to do that. ");
+        sb.append("Some tools are protected: if a tool says the owner must verify, tell the user briefly to say their passphrase. ");
         sb.append("You have no live internet knowledge except through tools; use the weather tool for weather, and be honest when you are unsure. ");
         sb.append("Current date and time: ").append(date).append(". ");
         List<String> mem = prefs.memory();

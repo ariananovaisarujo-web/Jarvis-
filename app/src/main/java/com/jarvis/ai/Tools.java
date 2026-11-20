@@ -1,5 +1,7 @@
 package com.jarvis.ai;
 
+import android.accessibilityservice.AccessibilityService;
+import android.app.KeyguardManager;
 import android.app.SearchManager;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
@@ -13,6 +15,7 @@ import android.hardware.camera2.CameraManager;
 import android.media.AudioManager;
 import android.net.Uri;
 import android.os.BatteryManager;
+import android.os.Build;
 import android.provider.AlarmClock;
 import android.provider.ContactsContract;
 import android.provider.MediaStore;
@@ -24,17 +27,40 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /** Everything Jarvis can actually DO on the phone. Each tool is exposed to Gemini as a function. */
 final class Tools {
     private final Context c;
     private final Prefs prefs;
     private volatile boolean endRequested;
+    private volatile boolean authRequested;
     private boolean launched;
+
+    interface Gate {
+        boolean ok();
+    }
+
+    /** Set by Jarvis: true while the owner has recently said the passphrase. */
+    volatile Gate gate;
+
+    private static final Set<String> SENSITIVE = new HashSet<>(Arrays.asList(
+            "call_contact", "send_sms", "whatsapp_message", "compose_email",
+            "unlock_phone", "tap_text", "type_text", "read_screen"));
+
+    private static final String A11Y_OFF =
+            "Accessibility service is not enabled. Ask the user to enable Jarvis in Settings, Accessibility.";
+
+    boolean consumeAuth() {
+        boolean a = authRequested;
+        authRequested = false;
+        return a;
+    }
 
     Tools(Context c, Prefs prefs) {
         this.c = c;
@@ -120,6 +146,18 @@ final class Tools {
                 J.obj("fact", s("The fact, written as a short sentence")), "fact"));
         a.put(fn("forget", "Delete a remembered fact.",
                 J.obj("fact", s("Keywords identifying the fact to forget")), "fact"));
+        a.put(fn("unlock_phone", "Turn the screen on and unlock the phone (opens the lock screen prompt if a PIN is set).", null));
+        a.put(fn("lock_screen", "Lock the phone and turn the screen off.", null));
+        a.put(fn("press_key", "Press a system button or open a system panel.",
+                J.obj("action", en("Which one", "home", "back", "recents", "notifications",
+                        "quick_settings", "screenshot")), "action"));
+        a.put(fn("tap_text", "Tap a button, tab or item on the current screen by its visible label.",
+                J.obj("text", s("The visible text or description of the thing to tap")), "text"));
+        a.put(fn("type_text", "Type text into the text field currently on screen.",
+                J.obj("text", s("Text to type")), "text"));
+        a.put(fn("scroll", "Scroll the current screen.",
+                J.obj("direction", en("Direction", "down", "up")), "direction"));
+        a.put(fn("read_screen", "Read the text currently visible on screen.", null));
         a.put(fn("end_conversation", "Call when the user is finished and no further listening is needed.", null));
         return a;
     }
@@ -128,6 +166,16 @@ final class Tools {
 
     String execute(String name, JSONObject a) {
         launched = false;
+        if (SENSITIVE.contains(name) && prefs.lockOn()) {
+            if (!prefs.passSet()) {
+                return "BLOCKED: no owner passphrase set. Tell the user to set one in Jarvis Settings under Owner lock.";
+            }
+            Gate g = gate;
+            if (g == null || !g.ok()) {
+                authRequested = true;
+                return "BLOCKED: owner verification needed. Ask the user to say their passphrase now.";
+            }
+        }
         String out;
         try {
             out = run(name, a);
@@ -251,11 +299,62 @@ final class Tools {
                 return "Saved.";
             case "forget":
                 return prefs.removeMemory(a.optString("fact")) ? "Forgotten." : "Nothing matching was stored.";
+            case "unlock_phone":
+                return unlockPhone();
+            case "lock_screen":
+                return global(AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN, 28, "Screen locked.");
+            case "press_key":
+                return pressKey(a.optString("action"));
+            case "tap_text": {
+                JarvisAccessibility svc = JarvisAccessibility.get();
+                return svc == null ? A11Y_OFF : svc.tap(a.optString("text"));
+            }
+            case "type_text": {
+                JarvisAccessibility svc = JarvisAccessibility.get();
+                return svc == null ? A11Y_OFF : svc.type(a.optString("text"));
+            }
+            case "scroll": {
+                JarvisAccessibility svc = JarvisAccessibility.get();
+                return svc == null ? A11Y_OFF : svc.scroll(!"up".equals(a.optString("direction")));
+            }
+            case "read_screen": {
+                JarvisAccessibility svc = JarvisAccessibility.get();
+                return svc == null ? A11Y_OFF : svc.read();
+            }
             case "end_conversation":
                 endRequested = true;
                 return "Conversation ended.";
             default:
                 return "Unknown tool: " + name;
+        }
+    }
+
+    private String unlockPhone() {
+        launch(new Intent(c, UnlockActivity.class));
+        KeyguardManager km = (KeyguardManager) c.getSystemService(Context.KEYGUARD_SERVICE);
+        if (km != null && km.isDeviceSecure()) {
+            return "Screen turned on. The phone has a PIN, pattern or fingerprint lock, so the owner must enter it. "
+                    + "Automatic PIN entry is not enabled.";
+        }
+        return "Phone unlocked.";
+    }
+
+    private String global(int action, int minSdk, String okMsg) {
+        if (Build.VERSION.SDK_INT < minSdk) return "Cannot do that on this Android version.";
+        JarvisAccessibility svc = JarvisAccessibility.get();
+        if (svc == null) return A11Y_OFF;
+        return svc.global(action) ? okMsg : "Cannot do that right now.";
+    }
+
+    private String pressKey(String action) {
+        switch (action) {
+            case "home": return global(AccessibilityService.GLOBAL_ACTION_HOME, 21, "Home.");
+            case "back": return global(AccessibilityService.GLOBAL_ACTION_BACK, 21, "Back.");
+            case "recents": return global(AccessibilityService.GLOBAL_ACTION_RECENTS, 21, "Recent apps.");
+            case "notifications": return global(AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS, 21, "Notifications.");
+            case "quick_settings": return global(AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS, 21, "Quick settings.");
+            case "screenshot": return global(AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT, 28, "Screenshot taken.");
+            default: return "Unknown key: " + action;
         }
     }
 
