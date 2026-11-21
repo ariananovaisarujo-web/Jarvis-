@@ -148,7 +148,13 @@ final class Tts {
                     OfflineTts e = Neural.engine(ctx);
                     for (String part : Neural.pieces(text)) {
                         if (my != egen) break;
-                        GeneratedAudio a = e.generateWithConfig(part, Neural.config(preset, hindi, speed));
+                        GeneratedAudio a = e.generateWithConfigAndCallback(part,
+                                Neural.config(preset, hindi, speed), new com.k2fsa.sherpa.onnx.OfflineTtsCallback() {
+                                    @Override
+                                    public Integer invoke(float[] samples) {
+                                        return 1;
+                                    }
+                                });
                         float[] f = a.getSamples();
                         if (f == null || f.length == 0) continue;
                         short[] pcm = new short[f.length];
