@@ -30,7 +30,8 @@ public class SettingsActivity extends Activity {
             {"English (India)", "en-IN"}, {"Hindi", "hi-IN"}, {"English (US)", "en-US"}, {"English (UK)", "en-GB"}};
     private static final String[][] VOICES = {
             {"Jarvis (deep British male)", "jarvis"}, {"Friday (female)", "friday"},
-            {"Desi male (Indian accent)", "desi_male"}, {"Desi female (Indian accent)", "desi_female"}};
+            {"Desi male (Indian accent)", "desi_male"}, {"Desi female (Indian accent)", "desi_female"},
+            {"American male (friendly)", "us_male"}, {"American female (warm)", "us_female"}};
     private static final String[][] PROVIDERS = {
             {"Google Gemini", "gemini"}, {"Groq (fast, free tier)", "groq"},
             {"OpenRouter (free models)", "openrouter"}, {"Mistral", "mistral"},
@@ -45,6 +46,9 @@ public class SettingsActivity extends Activity {
     private final java.util.Map<String, EditText> pKey = new java.util.HashMap<>();
     private final java.util.Map<String, EditText> pModel = new java.util.HashMap<>();
     private EditText customBase;
+    private TextView hdStatus;
+    private Switch hdSw;
+    private volatile boolean hdBusy;
     private Switch wakeSw, convSw, lockSw;
     private EditText owner, passphrase, codeApp;
     private SeekBar rate, pitch;
@@ -94,7 +98,11 @@ public class SettingsActivity extends Activity {
         codeApp = field("Code app for 'write code' (app name, e.g. Pyroid or Notepad)", prefs.codeApp(), false);
 
         header("VOICE");
-        add(button("Install better voices (phone TTS settings)", v -> openTtsSettings()));
+        hdStatus = label(Neural.installed(this) ? "HD voice: ready (offline)" : "HD voice: not downloaded yet", 13, DIM);
+        col.addView(hdStatus);
+        add(button("Download HD natural voices (130 MB, one time)", v -> downloadHd()));
+        hdSw = toggle("Use HD voice when available", prefs.neuralOn());
+        add(button("Phone voice settings", v -> openTtsSettings()));
         voiceSp = spinner("Voice (free, on-phone). Change any time", VOICES, prefs.voicePreset());
         sttLang = spinner("I listen in", STT, prefs.sttLang());
         ttsLang = spinner("I speak English in", TTS, prefs.ttsLang());
@@ -223,6 +231,7 @@ public class SettingsActivity extends Activity {
         prefs.setString("elevenModel", em.isEmpty() ? "eleven_flash_v2_5" : em);
         prefs.setBool("conv", convSw.isChecked());
         prefs.setBool("lock", lockSw.isChecked());
+        prefs.setBool("neuralOn", hdSw.isChecked());
         prefs.setString("voicePreset", VOICES[voiceSp.getSelectedItemPosition()][1]);
         prefs.setString("provider", PROVIDERS[providerSp.getSelectedItemPosition()][1]);
         for (String pk : pKey.keySet()) {
@@ -243,6 +252,46 @@ public class SettingsActivity extends Activity {
     }
 
     // ------------------------------------------------------------------ UI helpers
+
+    private void downloadHd() {
+        if (hdBusy) return;
+        if (Neural.installed(this)) {
+            hdStatus.setText("HD voice: ready (offline)");
+            return;
+        }
+        if (!Net.online(this)) {
+            hdStatus.setText("Turn on the internet first, then tap again.");
+            return;
+        }
+        hdBusy = true;
+        hdStatus.setText("Downloading HD voice... 0%");
+        final android.content.Context app = getApplicationContext();
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                String result;
+                try {
+                    Neural.download(app, new Neural.Progress() {
+                        @Override
+                        public void on(final String m) {
+                            runOnUiThread(new Runnable() {
+                                @Override public void run() { hdStatus.setText(m); }
+                            });
+                        }
+                    });
+                    result = "HD voice: ready (offline). Save and go back.";
+                } catch (Throwable t) {
+                    String m = t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage();
+                    result = "Download failed: " + m + ". Check internet and try again.";
+                }
+                hdBusy = false;
+                final String r = result;
+                runOnUiThread(new Runnable() {
+                    @Override public void run() { hdStatus.setText(r); }
+                });
+            }
+        }).start();
+    }
 
     private void openTtsSettings() {
         try {

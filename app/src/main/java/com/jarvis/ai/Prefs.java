@@ -23,6 +23,8 @@ final class Prefs {
         return (m.isEmpty() || m.equals("gemini-3.8-flash")) ? "gemini-3.5-flash" : m;
     }
 
+    boolean neuralOn() { return sp.getBoolean("neuralOn", true); }
+
     String raw(String k) { return sp.getString(k, ""); }
 
     /** gemini, groq, openrouter, mistral, nvidia or custom. */

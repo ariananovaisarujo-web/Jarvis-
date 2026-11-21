@@ -2,6 +2,8 @@ package com.jarvis.ai;
 
 import android.content.Context;
 import android.media.AudioAttributes;
+import android.media.AudioFormat;
+import android.media.AudioTrack;
 import android.media.MediaPlayer;
 import android.os.Handler;
 import android.os.Looper;
@@ -21,6 +23,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.function.Consumer;
+
+import com.k2fsa.sherpa.onnx.GeneratedAudio;
+import com.k2fsa.sherpa.onnx.OfflineTts;
 
 /**
  * Speech output. Uses ElevenLabs when a key and voice ID are set (falling back to the phone's
@@ -50,6 +55,8 @@ final class Tts {
     // ElevenLabs playback state (main thread, except egen which the fetch thread reads)
     private volatile int egen;
     private MediaPlayer mp;
+    private volatile AudioTrack curTrack;
+    private final ExecutorService neuralExec = Executors.newSingleThreadExecutor();
 
     /** Optional hook so the UI can show "ElevenLabs failed" messages. Called on the main thread. */
     Consumer<String> notice;
@@ -86,6 +93,14 @@ final class Tts {
         done = null;
         lastId = "";
         egen++;
+        AudioTrack at = curTrack;
+        if (at != null) {
+            try {
+                at.pause();
+                at.flush();
+            } catch (Exception ignored) {
+            }
+        }
         if (mp != null) {
             try {
                 mp.stop();
@@ -111,8 +126,90 @@ final class Tts {
             if (onDone != null) onDone.run();
             return;
         }
-        if (prefs.elevenOn() && Net.online(ctx)) speakEleven(text, onDone);
+        if (prefs.neuralOn() && Neural.installed(ctx)) speakNeural(text, onDone);
+        else if (prefs.elevenOn() && Net.online(ctx)) speakEleven(text, onDone);
         else speakSystem(text, onDone, 0);
+    }
+
+    // ------------------------------------------------------------------ neural (offline, free)
+
+    private void speakNeural(final String text, final Runnable onDone) {
+        stop();
+        final int my = egen;
+        final boolean hindi = hasDevanagari(text);
+        final String preset = prefs.voicePreset();
+        final float speed = Math.max(0.6f, Math.min(1.6f, prefs.rate()));
+        neuralExec.execute(new Runnable() {
+            @Override
+            public void run() {
+                AudioTrack track = null;
+                long frames = 0;
+                try {
+                    OfflineTts e = Neural.engine(ctx);
+                    for (String part : Neural.pieces(text)) {
+                        if (my != egen) break;
+                        GeneratedAudio a = e.generateWithConfig(part, Neural.config(preset, hindi, speed));
+                        float[] f = a.getSamples();
+                        if (f == null || f.length == 0) continue;
+                        short[] pcm = new short[f.length];
+                        for (int i = 0; i < f.length; i++) {
+                            float v = Math.max(-1f, Math.min(1f, f[i]));
+                            pcm[i] = (short) (v * 32767f);
+                        }
+                        if (track == null) {
+                            int rate = a.getSampleRate();
+                            int min = AudioTrack.getMinBufferSize(rate, AudioFormat.CHANNEL_OUT_MONO,
+                                    AudioFormat.ENCODING_PCM_16BIT);
+                            track = new AudioTrack.Builder()
+                                    .setAudioAttributes(new AudioAttributes.Builder()
+                                            .setUsage(AudioAttributes.USAGE_ASSISTANT)
+                                            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
+                                    .setAudioFormat(new AudioFormat.Builder()
+                                            .setSampleRate(rate)
+                                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
+                                    .setBufferSizeInBytes(Math.max(min, rate * 2 * 6))
+                                    .setTransferMode(AudioTrack.MODE_STREAM)
+                                    .build();
+                            curTrack = track;
+                            track.play();
+                        }
+                        if (my != egen) break;
+                        track.write(pcm, 0, pcm.length);
+                        frames += pcm.length;
+                    }
+                    if (track != null && my == egen) {
+                        int guard = 0;
+                        while (my == egen && track.getPlaybackHeadPosition() < frames && guard++ < 3000) {
+                            Thread.sleep(20);
+                        }
+                    }
+                    if (my == egen && track == null) throw new IllegalStateException("no audio");
+                } catch (final Throwable t) {
+                    if (my == egen) {
+                        final String msg = "HD voice failed, using the phone voice. " + t.getClass().getSimpleName();
+                        main.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (my != egen) return;
+                                if (notice != null) notice.accept(msg);
+                                speakSystem(text, onDone, 0);
+                            }
+                        });
+                    }
+                    return;
+                } finally {
+                    if (track != null) {
+                        try {
+                            track.release();
+                        } catch (Exception ignored) {
+                        }
+                        if (curTrack == track) curTrack = null;
+                    }
+                }
+                if (my == egen && onDone != null) main.post(onDone);
+            }
+        });
     }
 
     // ------------------------------------------------------------------ ElevenLabs
@@ -267,7 +364,7 @@ final class Tts {
 
     private void applyVoice(boolean hindi) {
         String preset = prefs.voicePreset();
-        boolean female = preset.equals("friday") || preset.equals("desi_female");
+        boolean female = preset.equals("friday") || preset.equals("desi_female") || preset.equals("us_female");
         Locale loc;
         if (hindi) loc = new Locale("hi", "IN");
         else if (preset.startsWith("desi")) loc = new Locale("en", "IN");

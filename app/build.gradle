@@ -12,6 +12,9 @@ android {
         targetSdk 33
         versionCode 1
         versionName '1.0'
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
     }
 
     buildTypes {
@@ -24,4 +27,15 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+
+    packaging {
+        resources {
+            excludes += ['META-INF/LICENSE*', 'META-INF/NOTICE*', 'META-INF/DEPENDENCIES', 'META-INF/versions/**',
+                    'META-INF/*.kotlin_module']
+        }
+    }
+}
+
+dependencies {
+    implementation 'org.apache.commons:commons-compress:1.26.2'
 }
