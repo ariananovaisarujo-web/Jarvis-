@@ -25,6 +25,16 @@ final class Prefs {
 
     boolean neuralOn() { return sp.getBoolean("neuralOn", true); }
 
+    String name() { return sp.getString("name", "sir").trim(); }
+    String city() { return sp.getString("city", "").trim(); }
+    String sttLang() { return sp.getString("sttLang", "en-IN"); }
+    String ttsLang() { return sp.getString("ttsLang", "en-GB"); }
+    String countryCode() { return sp.getString("cc", "91").trim(); }
+    boolean wake() { return sp.getBoolean("wake", false); }
+    boolean conv() { return sp.getBoolean("conv", true); }
+    float rate() { return sp.getFloat("rate", 1.0f); }
+    float pitch() { return sp.getFloat("pitch", 0.85f); }
+
     String raw(String k) { return sp.getString(k, ""); }
 
     /** gemini, groq, openrouter, mistral, nvidia or custom. */
