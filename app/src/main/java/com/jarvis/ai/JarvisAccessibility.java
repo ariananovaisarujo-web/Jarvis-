@@ -64,6 +64,48 @@ public class JarvisAccessibility extends AccessibilityService {
         return dispatchGesture(new GestureDescription.Builder().addStroke(sd).build(), null, null);
     }
 
+    /** Finds the lock screen's pattern grid. */
+    Rect patternBounds() {
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null) return null;
+        AccessibilityNodeInfo n = findPattern(root, 0);
+        if (n == null) return null;
+        Rect r = new Rect();
+        n.getBoundsInScreen(r);
+        return (r.width() > 50 && r.height() > 50) ? r : null;
+    }
+
+    private AccessibilityNodeInfo findPattern(AccessibilityNodeInfo node, int depth) {
+        if (node == null || depth > 40) return null;
+        CharSequence cn = node.getClassName();
+        String id = node.getViewIdResourceName();
+        if ((cn != null && cn.toString().contains("LockPatternView")) || (id != null && id.contains("lockPatternView"))) {
+            return node;
+        }
+        for (int i = 0; i < node.getChildCount(); i++) {
+            AccessibilityNodeInfo hit = findPattern(node.getChild(i), depth + 1);
+            if (hit != null) return hit;
+        }
+        return null;
+    }
+
+    /** Draws a 3x3 pattern; dots are numbered 1 to 9, left to right, top to bottom. */
+    boolean drawPattern(Rect r, int[] dots) {
+        if (r == null || dots.length < 2) return false;
+        Path p = new Path();
+        for (int i = 0; i < dots.length; i++) {
+            int row = (dots[i] - 1) / 3;
+            int col = (dots[i] - 1) % 3;
+            float x = r.left + r.width() * (col + 0.5f) / 3f;
+            float y = r.top + r.height() * (row + 0.5f) / 3f;
+            if (i == 0) p.moveTo(x, y);
+            else p.lineTo(x, y);
+        }
+        long dur = Math.max(700, 260L * dots.length);
+        GestureDescription.StrokeDescription sd = new GestureDescription.StrokeDescription(p, 0, dur);
+        return dispatchGesture(new GestureDescription.Builder().addStroke(sd).build(), null, null);
+    }
+
     // ------------------------------------------------------------------ tap
 
     String tap(String text) {

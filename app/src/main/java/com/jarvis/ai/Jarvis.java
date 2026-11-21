@@ -90,7 +90,17 @@ final class Jarvis {
         tts.notice = msg -> log("system", msg);
         tools.gate = () -> System.currentTimeMillis() < authUntil;
         tools.searcher = new Tools.Searcher() {
-            @Override public String search(String query) throws Exception { return gemini.searchWeb(query); }
+            @Override
+            public String search(String query) throws Exception {
+                if ("gemini".equals(prefs.provider()) && !prefs.apiKey().isEmpty()) {
+                    try {
+                        String r = gemini.searchWeb(query);
+                        if (r != null && r.length() > 40 && !r.startsWith("No ")) return r;
+                    } catch (Exception ignored) {
+                    }
+                }
+                return WebSearch.search(query);
+            }
         };
     }
 

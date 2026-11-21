@@ -128,9 +128,9 @@ final class Tools {
                 J.obj("seconds", i("Duration in seconds"), "label", s("Optional label")), "seconds"));
         a.put(fn("flashlight", "Turn the flashlight on or off.",
                 J.obj("on", b("true to turn on, false to turn off")), "on"));
-        a.put(fn("web_search", "Search Google in the browser.",
+        a.put(fn("web_search", "ONLY when the user explicitly asks to open Google or the browser and show a search on screen (for example: google kholo, mere samne search karke dikhao). Never use this to answer a question.",
                 J.obj("query", s("What to search for")), "query"));
-        a.put(fn("search_web", "Search the live web and get a short factual answer (news, prices, scores, facts).",
+        a.put(fn("search_web", "Search the live web silently in the background and get results to answer the user yourself. Use this for every question that needs current or factual information; no screen is opened.",
                 J.obj("query", s("What to look up")), "query"));
         a.put(fn("read_url", "Download a web page and read its text, to answer questions about it or summarise it.",
                 J.obj("url", s("Full web address")), "url"));
@@ -415,6 +415,7 @@ final class Tools {
         if (svc == null) return A11Y_OFF;
         String pin = PinVault.load(c);
         if (pin == null || pin.isEmpty()) return "The saved PIN could not be read. Please save it again in Settings.";
+        if (pin.startsWith("P:")) return patternUnlock(km, svc, pin.substring(2));
         try {
             Thread.sleep(1600);
             if (!km.isKeyguardLocked()) return "Phone unlocked.";
@@ -443,6 +444,29 @@ final class Tools {
         }
         return km.isKeyguardLocked()
                 ? "I entered the PIN but the phone is still locked. Please check the PIN saved in Settings."
+                : "Phone unlocked.";
+    }
+
+    private String patternUnlock(KeyguardManager km, JarvisAccessibility svc, String digits) {
+        int[] dots = new int[digits.length()];
+        for (int i = 0; i < dots.length; i++) dots[i] = digits.charAt(i) - '0';
+        try {
+            Thread.sleep(1600);
+            if (!km.isKeyguardLocked()) return "Phone unlocked.";
+            android.graphics.Rect r = svc.patternBounds();
+            if (r == null) {
+                svc.swipeUp();
+                Thread.sleep(1000);
+                r = svc.patternBounds();
+            }
+            if (r == null) return "I could not find the pattern grid on the lock screen. The owner must draw it.";
+            if (!svc.drawPattern(r, dots)) return "I could not draw the pattern. The owner must draw it.";
+            Thread.sleep(2200);
+        } catch (InterruptedException e) {
+            return "Unlock interrupted.";
+        }
+        return km.isKeyguardLocked()
+                ? "I drew the pattern but the phone is still locked. Please check the pattern saved in Settings."
                 : "Phone unlocked.";
     }
 

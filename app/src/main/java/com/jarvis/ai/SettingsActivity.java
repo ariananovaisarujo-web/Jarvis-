@@ -45,7 +45,7 @@ public class SettingsActivity extends Activity {
     private Spinner sttLang, ttsLang, providerSp, voiceSp;
     private final java.util.Map<String, EditText> pKey = new java.util.HashMap<>();
     private final java.util.Map<String, EditText> pModel = new java.util.HashMap<>();
-    private EditText customBase, pinField;
+    private EditText customBase, pinField, patField;
     private TextView vpStatus;
     private Switch spkSw;
     private SeekBar thrBar;
@@ -137,7 +137,10 @@ public class SettingsActivity extends Activity {
         add(thrBar);
         pinField = field("Phone unlock PIN (digits only, saved encrypted on this phone; leave empty to keep the current one)", "", true);
         pinField.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD);
-        add(button("Remove saved PIN", v -> { PinVault.clear(this); vpStatus.setText(vpText()); }));
+        col.addView(label("OR pattern lock: type the dot numbers in the order you draw them. Dots: 1 2 3 / 4 5 6 / 7 8 9 (top row first). Example: 14789 = top-left, down to bottom-left, then right along the bottom.", 12, DIM));
+        patField = field("Phone unlock pattern (digits 1-9, no repeats)", "", true);
+        patField.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        add(button("Remove saved PIN / pattern", v -> { PinVault.clear(this); vpStatus.setText(vpText()); }));
         passphrase = field(prefs.passSet()
                 ? "New passphrase (a phrase only you know; leave empty to keep the current one)"
                 : "Set your passphrase (a phrase only you know, 2 to 4 words). Required to use protected actions.",
@@ -251,6 +254,20 @@ public class SettingsActivity extends Activity {
         prefs.setBool("neuralOn", hdSw.isChecked());
         prefs.setBool("speakerOn", spkSw.isChecked());
         prefs.setFloat("voiceThr", Math.max(0.1f, thrBar.getProgress() / 100f));
+        String pat = patField.getText().toString().trim();
+        if (!pat.isEmpty()) {
+            boolean ok = pat.length() >= 4 && pat.matches("[1-9]+");
+            for (int i = 0; ok && i < pat.length(); i++) if (pat.indexOf(pat.charAt(i)) != i) ok = false;
+            if (!ok) {
+                android.widget.Toast.makeText(this, "Pattern must be 4 to 9 different digits from 1 to 9.", android.widget.Toast.LENGTH_LONG).show();
+            } else {
+                try {
+                    PinVault.save(this, "P:" + pat);
+                } catch (Exception e) {
+                    android.widget.Toast.makeText(this, "Could not save the pattern securely.", android.widget.Toast.LENGTH_LONG).show();
+                }
+            }
+        }
         String pin = pinField.getText().toString().trim();
         if (!pin.isEmpty()) {
             try {
@@ -282,7 +299,7 @@ public class SettingsActivity extends Activity {
 
     private String vpText() {
         return "Voice-ID: " + (VoicePrint.enrolled(prefs) ? "your voice is saved" : "not recorded yet")
-                + ".  Phone PIN: " + (PinVault.has(this) ? "saved (encrypted)" : "not saved") + ".";
+                + ".  Phone lock: " + (PinVault.has(this) ? "saved (encrypted)" : "not saved") + ".";
     }
 
     private void enrollVoice() {
