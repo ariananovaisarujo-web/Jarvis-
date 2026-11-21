@@ -75,9 +75,71 @@ final class Jarvis {
     private final Runnable wakeRun = new Runnable() {
         @Override
         public void run() {
-            if (wakeEnabled && state == State.IDLE && !wakeListening) listen(true, false);
+            if (!wakeEnabled || state != State.IDLE || wakeListening) return;
+            if (!silentFailed && prefs.silentWake() && WakeEngine.installed(ctx) && startSilent()) return;
+            listen(true, false);
         }
     };
+
+    private boolean silentFailed;
+    private boolean silentDownloading;
+    private boolean flipOffline;
+    private boolean sttRetried;
+
+    /** Silent offline wake engine: no internet, no dings, works with the screen off. */
+    private boolean startSilent() {
+        wakeListening = true;
+        boolean ok = WakeEngine.start(ctx, new WakeEngine.Hit() {
+            @Override
+            public void onWake(String heard) {
+                wakeListening = false;
+                if (!wakeEnabled || state != State.IDLE) return;
+                if (heard == null) {
+                    // the engine stopped by itself (microphone taken, etc.): try again shortly
+                    scheduleWake(2000);
+                    return;
+                }
+                sttRetried = false;
+                flipOffline = false;
+                wakeHit("");
+            }
+        });
+        if (!ok) {
+            wakeListening = false;
+            silentFailed = true;
+            log("system", "Silent wake engine could not start (" + WakeEngine.lastError
+                    + "). Using the normal listener instead.");
+        }
+        return ok;
+    }
+
+    private void maybeDownloadSilent() {
+        if (silentDownloading || WakeEngine.installed(ctx) || !prefs.silentWake() || !Net.online(ctx)) return;
+        silentDownloading = true;
+        log("system", "Downloading the silent wake engine (about 128 MB, one time)...");
+        bg.execute(new Runnable() {
+            @Override
+            public void run() {
+                String res;
+                try {
+                    WakeEngine.download(ctx, null);
+                    res = "Silent wake engine ready. Say \"Jarvis\" any time, screen on or off.";
+                } catch (Throwable t) {
+                    res = "Silent wake engine download failed (" + t.getClass().getSimpleName() + "). Will retry later.";
+                }
+                final String r = res;
+                main.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        silentDownloading = false;
+                        silentFailed = false;
+                        log("system", r);
+                        if (wakeEnabled && state == State.IDLE && !wakeListening) scheduleWake(0);
+                    }
+                });
+            }
+        });
+    }
 
     private Jarvis(Context c) {
         ctx = c;
@@ -162,9 +224,12 @@ final class Jarvis {
                 wakeEnabled = on;
                 setState(state);
                 if (on) {
+                    silentFailed = false;
+                    maybeDownloadSilent();
                     if (state == State.IDLE) scheduleWake(0);
                 } else {
                     main.removeCallbacks(wakeRun);
+                    WakeEngine.stop();
                     quiet(false);
                     if (wakeListening) {
                         stt.cancel();
@@ -250,6 +315,7 @@ final class Jarvis {
         stt.cancel();
         tts.stop();
         wakeListening = false;
+        WakeEngine.stop();
         main.removeCallbacks(wakeRun);
         toIdle();
     }
@@ -276,13 +342,14 @@ final class Jarvis {
             return;
         }
         if (!wake) {
+            WakeEngine.stop();
             tts.stop();
             setState(State.LISTENING);
         }
         wakeListening = wake;
         quiet(wake);
         stt.capture = speakerLock();
-        stt.start(prefs.sttLang(), wake || !Net.online(ctx), !wake, new Stt.Cb() {
+        stt.start(prefs.sttLang(), wake || (!Net.online(ctx) ^ flipOffline), !wake, new Stt.Cb() {
             @Override
             public void onRms(float db) {
                 if (!wake) for (Listener l : listeners) l.onLevel(db);
@@ -296,6 +363,8 @@ final class Jarvis {
             @Override
             public void onResult(List<String> alts) {
                 wakeListening = false;
+                sttRetried = false;
+                flipOffline = false;
                 if (wake) onWakeResult(alts);
                 else onHeard(alts.isEmpty() ? "" : alts.get(0));
             }
@@ -362,17 +431,33 @@ final class Jarvis {
             return;
         }
         boolean quiet = code == SpeechRecognizer.ERROR_NO_MATCH || code == SpeechRecognizer.ERROR_SPEECH_TIMEOUT;
+        boolean broken = code == SpeechRecognizer.ERROR_NETWORK || code == SpeechRecognizer.ERROR_NETWORK_TIMEOUT
+                || code == SpeechRecognizer.ERROR_SERVER || code == SpeechRecognizer.ERROR_CLIENT
+                || code == SpeechRecognizer.ERROR_RECOGNIZER_BUSY || code == 12 || code == 13;
+        if (broken && !sttRetried) {
+            // Google's recognizer is flaky from the background: retry once, the other way round
+            // (online <-> offline pack) after a short pause.
+            sttRetried = true;
+            flipOffline = !flipOffline;
+            final boolean c2 = cont;
+            main.postDelayed(new Runnable() {
+                @Override public void run() { if (state == State.LISTENING || state == State.IDLE) listen(false, c2); }
+            }, 400);
+            return;
+        }
+        sttRetried = false;
+        flipOffline = false;
         if (!(quiet && cont)) {
             if (quiet) log("system", "I didn't catch that.");
             else if (code == -1) log("system", "Speech recognition isn't available. Install or enable the Google app.");
             else if (code == SpeechRecognizer.ERROR_NETWORK || code == SpeechRecognizer.ERROR_NETWORK_TIMEOUT
                     || code == SpeechRecognizer.ERROR_SERVER || code == 12 || code == 13) {
                 log("system", Net.online(ctx)
-                        ? "Speech recognition could not reach Google."
+                        ? "Speech recognition could not reach Google (code " + code + ")."
                         : "No internet and no offline voice pack. In the Google app, open Settings, Voice, "
                         + "Offline speech recognition, and download English and Hindi.");
             }
-            else log("system", "Speech recognition error " + code + ".");
+            else log("system", "Speech recognition error " + code + ". Open the Google app and check microphone permission.");
         }
         toIdle();
     }
@@ -420,6 +505,7 @@ final class Jarvis {
     private void handle(final String text, final boolean voice) {
         quiet(false);
         final int my = ++gen;
+        WakeEngine.stop();
         stt.cancel();
         tts.stop();
         wakeListening = false;

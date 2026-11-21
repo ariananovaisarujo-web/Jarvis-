@@ -537,9 +537,26 @@ final class Tools {
 
     // ------------------------------------------------------------------ individual tools
 
+    /** Hindi-script app names (what the speech engine often returns) to their English labels. */
+    private static String deva(String q) {
+        String[][] m = {
+                {"व्हाट्सएप", "whatsapp"}, {"व्हाट्सऐप", "whatsapp"}, {"वाट्सएप", "whatsapp"}, {"व्हॉट्सऐप", "whatsapp"},
+                {"व्हॉट्सएप", "whatsapp"}, {"वॉट्सऐप", "whatsapp"}, {"वॉट्सएप", "whatsapp"},
+                {"इंस्टाग्राम", "instagram"}, {"इंस्टा", "instagram"}, {"यूट्यूब", "youtube"}, {"यूटयूब", "youtube"},
+                {"फेसबुक", "facebook"}, {"क्रोम", "chrome"}, {"गूगल", "google"}, {"टेलीग्राम", "telegram"},
+                {"स्नैपचैट", "snapchat"}, {"कैमरा", "camera"}, {"सेटिंग्स", "settings"}, {"सेटिंग", "settings"},
+                {"गैलरी", "gallery"}, {"मैप्स", "maps"}, {"जीमेल", "gmail"}, {"कैलकुलेटर", "calculator"},
+                {"फोन", "phone"}, {"संदेश", "messages"}, {"मैसेज", "messages"}, {"घड़ी", "clock"},
+                {"स्पॉटिफाई", "spotify"}, {"पाइरॉइड", "pyroid"}, {"नोटपैड", "notepad"}, {"ट्विटर", "x"},
+        };
+        for (String[] e : m) if (q.contains(e[0])) return e[1];
+        return q;
+    }
+
     private String openApp(String name) {
         String q = name.toLowerCase(Locale.ROOT).trim();
         if (q.isEmpty()) return "No app name given.";
+        q = deva(q);
         PackageManager pm = c.getPackageManager();
         Intent main = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
         List<ResolveInfo> list = pm.queryIntentActivities(main, 0);

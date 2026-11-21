@@ -39,6 +39,7 @@ final class Prefs {
         }
     }
 
+    boolean silentWake() { return sp.getBoolean("silentWake", true); }
     boolean speakerOn() { return sp.getBoolean("speakerOn", true); }
     float voiceThreshold() { return sp.getFloat("voiceThr", 0.40f); }
 

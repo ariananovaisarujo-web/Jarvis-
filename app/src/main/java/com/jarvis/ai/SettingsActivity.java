@@ -52,6 +52,9 @@ public class SettingsActivity extends Activity {
     private volatile boolean vpBusy;
     private TextView hdStatus;
     private Switch hdSw;
+    private Switch silentSw;
+    private TextView silentStatus;
+    private volatile boolean silentBusy;
     private volatile boolean hdBusy;
     private Switch wakeSw, convSw, lockSw;
     private EditText owner, passphrase, codeApp;
@@ -100,6 +103,13 @@ public class SettingsActivity extends Activity {
         cc = field("Country code for WhatsApp numbers (e.g. 91)", prefs.countryCode(), false);
 
         codeApp = field("Code app for 'write code' (app name, e.g. Pyroid or Notepad)", prefs.codeApp(), false);
+
+        header("WAKE WORD");
+        col.addView(label("Silent wake engine: offline, no ding sounds, works with screen off (one-time download).", 12, DIM));
+        silentStatus = label(WakeEngine.installed(this) ? "Silent wake engine: ready" : "Silent wake engine: not downloaded yet", 13, DIM);
+        col.addView(silentStatus);
+        silentSw = toggle("Use silent wake engine (recommended)", prefs.silentWake());
+        add(button("Download silent wake engine (128 MB, one time)", v -> downloadSilent()));
 
         header("VOICE");
         col.addView(label("BEST HINDI VOICE (Sarvam, natural Indian voices, free credits on signup). Leave empty to skip.", 12, DIM));
@@ -263,6 +273,7 @@ public class SettingsActivity extends Activity {
         prefs.setBool("conv", convSw.isChecked());
         prefs.setBool("lock", lockSw.isChecked());
         prefs.setBool("neuralOn", hdSw.isChecked());
+        prefs.setBool("silentWake", silentSw.isChecked());
         prefs.setString("sarvamKey", sarvamKey.getText().toString().trim());
         prefs.setString("sarvamVoice", sarvamVoice.getText().toString().trim());
         prefs.setBool("speakerOn", spkSw.isChecked());
@@ -393,6 +404,42 @@ public class SettingsActivity extends Activity {
                     @Override public void run() { hdStatus.setText(r); }
                 });
                 if (r.startsWith("OK")) Jarvis.get(app).say("Hello sir. I am Jarvis. The HD voice is working.");
+            }
+        }).start();
+    }
+
+    private void downloadSilent() {
+        if (silentBusy) return;
+        if (WakeEngine.installed(this)) {
+            silentStatus.setText("Silent wake engine: ready");
+            return;
+        }
+        silentBusy = true;
+        silentStatus.setText("Downloading silent wake engine... 0%");
+        final android.content.Context app = getApplicationContext();
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                String result;
+                try {
+                    WakeEngine.download(app, new WakeEngine.Progress() {
+                        @Override
+                        public void on(final String m) {
+                            runOnUiThread(new Runnable() {
+                                @Override public void run() { silentStatus.setText(m); }
+                            });
+                        }
+                    });
+                    result = "Silent wake engine: ready. Save, then turn Always-on off and on.";
+                } catch (Throwable t) {
+                    String m = t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage();
+                    result = "Download failed (" + t.getClass().getSimpleName() + "): " + m;
+                }
+                silentBusy = false;
+                final String r = result;
+                runOnUiThread(new Runnable() {
+                    @Override public void run() { silentStatus.setText(r); }
+                });
             }
         }).start();
     }
