@@ -145,6 +145,44 @@ public class JarvisAccessibility extends AccessibilityService {
         return "Cannot tap '" + q + "'.";
     }
 
+    /** Taps something whose text or description is exactly one of the labels. Returns true if tapped. */
+    boolean tapExact(String... labels) {
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null) return false;
+        AccessibilityNodeInfo hit = null;
+        for (String l : labels) {
+            hit = findExact(root, l, 0);
+            if (hit != null) break;
+        }
+        if (hit == null) return false;
+        AccessibilityNodeInfo n = hit;
+        while (n != null && !n.isClickable()) n = n.getParent();
+        if (n != null && n.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true;
+        Rect r = new Rect();
+        hit.getBoundsInScreen(r);
+        if (r.width() > 0 && r.height() > 0) {
+            Path p = new Path();
+            p.moveTo(r.centerX(), r.centerY());
+            return dispatchGesture(new GestureDescription.Builder()
+                    .addStroke(new GestureDescription.StrokeDescription(p, 0, 60)).build(), null, null);
+        }
+        return false;
+    }
+
+    private AccessibilityNodeInfo findExact(AccessibilityNodeInfo node, String q, int depth) {
+        if (node == null || depth > 40) return null;
+        CharSequence t = node.getText();
+        CharSequence d = node.getContentDescription();
+        if ((t != null && t.toString().trim().equalsIgnoreCase(q)) || (d != null && d.toString().trim().equalsIgnoreCase(q))) {
+            return node;
+        }
+        for (int i = 0; i < node.getChildCount(); i++) {
+            AccessibilityNodeInfo hit = findExact(node.getChild(i), q, depth + 1);
+            if (hit != null) return hit;
+        }
+        return null;
+    }
+
     private AccessibilityNodeInfo findByDescription(AccessibilityNodeInfo node, String q, int depth) {
         if (node == null || depth > 40) return null;
         CharSequence d = node.getContentDescription();

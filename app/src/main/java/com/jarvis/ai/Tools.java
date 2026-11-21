@@ -60,7 +60,7 @@ final class Tools {
 
     private static final Set<String> SENSITIVE = new HashSet<>(Arrays.asList(
             "call_contact", "send_sms", "whatsapp_message", "compose_email",
-            "unlock_phone", "tap_text", "type_text", "read_screen", "write_code", "paste", "read_notifications"));
+            "unlock_phone", "press_send", "tap_text", "type_text", "read_screen", "write_code", "paste", "read_notifications"));
 
     private static final String A11Y_OFF =
             "Accessibility service is not enabled. Ask the user to enable Jarvis in Settings, Accessibility.";
@@ -119,7 +119,7 @@ final class Tools {
                 J.obj("who", s("Contact name or phone number")), "who"));
         a.put(fn("send_sms", "Send an SMS text message right away.",
                 J.obj("to", s("Contact name or phone number"), "message", s("The message text")), "to", "message"));
-        a.put(fn("whatsapp_message", "Open a WhatsApp chat with a prefilled message. The user still taps send.",
+        a.put(fn("whatsapp_message", "Send a WhatsApp message to a contact or number. It opens the chat and sends the message by itself.",
                 J.obj("to", s("Contact name or phone number"), "message", s("The message text")), "to"));
         a.put(fn("set_alarm", "Set an alarm on the phone.",
                 J.obj("hour", i("Hour, 0 to 23"), "minute", i("Minute, 0 to 59"), "label", s("Optional label")),
@@ -164,6 +164,7 @@ final class Tools {
         a.put(fn("press_key", "Press a system button or open a system panel.",
                 J.obj("action", en("Which one", "home", "back", "recents", "notifications",
                         "quick_settings", "screenshot")), "action"));
+        a.put(fn("press_send", "Tap the Send button in the current messaging app (WhatsApp, Instagram, Telegram, Messenger, SMS) after the message has been typed.", null));
         a.put(fn("tap_text", "Tap a button, tab or item on the current screen by its visible label.",
                 J.obj("text", s("The visible text or description of the thing to tap")), "text"));
         a.put(fn("type_text", "Type text into the text field currently on screen.",
@@ -245,8 +246,35 @@ final class Tools {
                 }
                 String msg = a.optString("message");
                 String url = "https://wa.me/" + digits + (msg.isEmpty() ? "" : "?text=" + Uri.encode(msg));
-                launch(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
-                return "WhatsApp chat with " + r[0] + " opened. The user must tap send.";
+                Intent wi = new Intent(Intent.ACTION_VIEW, Uri.parse("whatsapp://send?phone=" + digits
+                        + (msg.isEmpty() ? "" : "&text=" + Uri.encode(msg))));
+                PackageManager wpm = c.getPackageManager();
+                boolean app = false;
+                for (String pk : new String[]{"com.whatsapp", "com.whatsapp.w4b"}) {
+                    try {
+                        wpm.getPackageInfo(pk, 0);
+                        wi.setPackage(pk);
+                        app = true;
+                        break;
+                    } catch (Exception ignored) {
+                    }
+                }
+                launch(app ? wi : new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+                JarvisAccessibility wsvc = JarvisAccessibility.get();
+                if (msg.isEmpty() || wsvc == null) {
+                    return "WhatsApp chat with " + r[0] + " opened. The user must tap send"
+                            + (wsvc == null ? " (turn on Jarvis in Accessibility so I can send by myself)." : ".");
+                }
+                try {
+                    Thread.sleep(1800);
+                    for (int i = 0; i < 14; i++) {
+                        if (wsvc.tapExact("Send", "भेजें")) return "WhatsApp message sent to " + r[0] + ".";
+                        Thread.sleep(450);
+                    }
+                } catch (InterruptedException ignored) {
+                }
+                return "WhatsApp chat with " + r[0] + " is open with the message typed, but I could not find the Send button. "
+                        + "Use read_screen and tap_text, or ask the user to tap send.";
             }
             case "set_alarm": {
                 Intent in = new Intent(AlarmClock.ACTION_SET_ALARM)
@@ -341,6 +369,18 @@ final class Tools {
                 return global(AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN, 28, "Screen locked.");
             case "press_key":
                 return pressKey(a.optString("action"));
+            case "press_send": {
+                JarvisAccessibility svc = JarvisAccessibility.get();
+                if (svc == null) return A11Y_OFF;
+                try {
+                    for (int i = 0; i < 4; i++) {
+                        if (svc.tapExact("Send", "Send message", "Send Message", "भेजें", "SEND")) return "Message sent.";
+                        Thread.sleep(400);
+                    }
+                } catch (InterruptedException ignored) {
+                }
+                return "I could not find a Send button on this screen.";
+            }
             case "tap_text": {
                 JarvisAccessibility svc = JarvisAccessibility.get();
                 return svc == null ? A11Y_OFF : svc.tap(a.optString("text"));
