@@ -46,7 +46,22 @@ final class VoicePrint {
     }
 
     static boolean modelReady(Context c) {
-        return model(c).length() > 1000000L;
+        if (model(c).length() > 1000000L) return true;
+        // The model ships inside the app: unpack it once.
+        try {
+            File f = model(c);
+            f.getParentFile().mkdirs();
+            File tmp = new File(f.getPath() + ".part");
+            try (InputStream in = c.getAssets().open("spk/model.onnx"); OutputStream os = new FileOutputStream(tmp)) {
+                byte[] b = new byte[1 << 16];
+                int r;
+                while ((r = in.read(b)) > 0) os.write(b, 0, r);
+            }
+            if (tmp.length() > 1000000L && tmp.renameTo(f)) return true;
+            tmp.delete();
+        } catch (Exception ignored) {
+        }
+        return false;
     }
 
     static boolean enrolled(Prefs p) {

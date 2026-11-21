@@ -198,10 +198,13 @@ final class Jarvis {
     }
 
     private boolean beepsMuted;
+    private final int[] savedVol = new int[4];
+    private static final int[] QUIET_STREAMS = {AudioManager.STREAM_MUSIC, AudioManager.STREAM_SYSTEM,
+            AudioManager.STREAM_NOTIFICATION, AudioManager.STREAM_VOICE_CALL};
 
     /**
      * The speech recognizer plays a "ding" every time it starts or stops. In the always-on wake loop
-     * that repeats all day, so those streams are muted while only waiting for the wake word.
+     * that repeats all day, so those streams are silenced while only waiting for the wake word.
      */
     private void quiet(boolean on) {
         try {
@@ -209,20 +212,23 @@ final class Jarvis {
             if (am == null) return;
             if (on && !am.isMusicActive()) {
                 if (!beepsMuted) {
-                    int[] st = {AudioManager.STREAM_MUSIC, AudioManager.STREAM_SYSTEM, AudioManager.STREAM_NOTIFICATION};
-                    for (int x : st) {
+                    for (int i = 0; i < QUIET_STREAMS.length; i++) {
+                        int x = QUIET_STREAMS[i];
                         try {
+                            savedVol[i] = am.getStreamVolume(x);
                             am.adjustStreamVolume(x, AudioManager.ADJUST_MUTE, 0);
+                            if (!am.isStreamMute(x)) am.setStreamVolume(x, 0, 0);
                         } catch (Exception ignored) {
                         }
                     }
                     beepsMuted = true;
                 }
             } else if (beepsMuted) {
-                int[] st = {AudioManager.STREAM_MUSIC, AudioManager.STREAM_SYSTEM, AudioManager.STREAM_NOTIFICATION};
-                for (int x : st) {
+                for (int i = 0; i < QUIET_STREAMS.length; i++) {
+                    int x = QUIET_STREAMS[i];
                     try {
                         am.adjustStreamVolume(x, AudioManager.ADJUST_UNMUTE, 0);
+                        if (am.getStreamVolume(x) == 0 && savedVol[i] > 0) am.setStreamVolume(x, savedVol[i], 0);
                     } catch (Exception ignored) {
                     }
                 }

@@ -112,6 +112,13 @@ public class SettingsActivity extends Activity {
         add(button("Test HD voice", v -> testHd()));
         hdSw = toggle("Use HD voice when available", prefs.neuralOn());
         add(button("Phone voice settings", v -> openTtsSettings()));
+        col.addView(label("If you hear repeated 'ding' sounds in the background with Always-on, allow Do Not Disturb access so Jarvis can silence them:", 12, DIM));
+        add(button("Allow Do Not Disturb access (stops dings)", v -> {
+            try {
+                startActivity(new android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS));
+            } catch (Exception ignored) {
+            }
+        }));
         voiceSp = spinner("Voice (free, on-phone). Change any time", VOICES, prefs.voicePreset());
         sttLang = spinner("I listen in", STT, prefs.sttLang());
         ttsLang = spinner("I speak English in", TTS, prefs.ttsLang());
@@ -314,10 +321,6 @@ public class SettingsActivity extends Activity {
             MainActivity.requestAllPermissions(this);
             return;
         }
-        if (!VoicePrint.modelReady(this) && !Net.online(this)) {
-            vpStatus.setText("Turn on the internet once to download the voice-ID model (26 MB), then tap again.");
-            return;
-        }
         vpBusy = true;
         final android.content.Context app = getApplicationContext();
         final Jarvis j = Jarvis.get(app);
@@ -400,10 +403,6 @@ public class SettingsActivity extends Activity {
             hdStatus.setText("HD voice: ready (offline)");
             return;
         }
-        if (!Net.online(this)) {
-            hdStatus.setText("Turn on the internet first, then tap again.");
-            return;
-        }
         hdBusy = true;
         hdStatus.setText("Downloading HD voice... 0%");
         final android.content.Context app = getApplicationContext();
@@ -423,7 +422,7 @@ public class SettingsActivity extends Activity {
                     result = "HD voice: ready (offline). Save and go back.";
                 } catch (Throwable t) {
                     String m = t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage();
-                    result = "Download failed: " + m + ". Check internet and try again.";
+                    result = "Download failed (" + t.getClass().getSimpleName() + "): " + m + ". Check internet and try again.";
                 }
                 hdBusy = false;
                 final String r = result;

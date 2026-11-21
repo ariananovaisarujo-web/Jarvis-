@@ -15,9 +15,8 @@ final class Net {
             Network n = cm.getActiveNetwork();
             if (n == null) return false;
             NetworkCapabilities caps = cm.getNetworkCapabilities(n);
-            return caps != null
-                    && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                    && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
+            // VALIDATED is not required: on some networks Android's own check fails even though the internet works.
+            return caps != null && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
         } catch (Exception e) {
             return true; // if we cannot tell, let the real request decide
         }
