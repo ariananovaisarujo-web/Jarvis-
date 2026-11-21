@@ -39,11 +39,13 @@ final class OpenAiChat {
 
     synchronized Gemini.Result ask(String userText, String system) {
         Gemini.Result res = new Gemini.Result();
-        String key = prefs.altKey();
-        if (key.isEmpty()) {
-            res.error = "Sir, my " + prefs.provider() + " API key is missing. Add it in Settings.";
+        java.util.List<String> chain = prefs.altChain();
+        if (chain.isEmpty()) {
+            res.error = "Sir, no API key is set for the chosen brain. Add one in Settings.";
             return res;
         }
+        int ci = 0;
+        String prov = chain.get(0);
         final int mark = msgs.length();
         msgs.put(J.obj("role", "user", "content", userText));
         trim();
@@ -54,14 +56,19 @@ final class OpenAiChat {
             JSONArray all = new JSONArray();
             all.put(J.obj("role", "system", "content", system));
             for (int i = 0; i < msgs.length(); i++) all.put(msgs.opt(i));
-            JSONObject req = J.obj("model", prefs.altModel(), "messages", all,
+            JSONObject req = J.obj("model", prefs.modelFor(prov), "messages", all,
                     "tools", defs, "tool_choice", "auto", "temperature", 0.8, "max_tokens", 400);
 
             String body;
             try {
-                body = Http.postJsonHeader(prefs.altBase() + "/chat/completions", req.toString(),
-                        "Authorization", "Bearer " + key);
+                body = Http.postJsonHeader(prefs.baseFor(prov) + "/chat/completions", req.toString(),
+                        "Authorization", "Bearer " + prefs.keyFor(prov));
             } catch (Http.Err e) {
+                if (ci + 1 < chain.size()) {
+                    prov = chain.get(++ci);
+                    step--;
+                    continue;
+                }
                 truncate(mark);
                 res.error = friendly(e);
                 return res;

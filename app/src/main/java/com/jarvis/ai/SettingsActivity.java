@@ -33,7 +33,8 @@ public class SettingsActivity extends Activity {
             {"Desi male (Indian accent)", "desi_male"}, {"Desi female (Indian accent)", "desi_female"}};
     private static final String[][] PROVIDERS = {
             {"Google Gemini", "gemini"}, {"Groq (fast, free tier)", "groq"},
-            {"OpenRouter (free models)", "openrouter"}, {"Mistral", "mistral"}};
+            {"OpenRouter (free models)", "openrouter"}, {"Mistral", "mistral"},
+            {"NVIDIA NIM (free, many models)", "nvidia"}, {"Custom (any OpenAI-style API)", "custom"}};
     private static final String[][] TTS = {
             {"British (classic Jarvis)", "en-GB"}, {"Indian English", "en-IN"}, {"US English", "en-US"}};
 
@@ -41,7 +42,9 @@ public class SettingsActivity extends Activity {
     private LinearLayout col;
     private EditText key, model, name, city, cc, elevenKey, elevenVoice, elevenModel;
     private Spinner sttLang, ttsLang, providerSp, voiceSp;
-    private EditText altKey, altModel;
+    private final java.util.Map<String, EditText> pKey = new java.util.HashMap<>();
+    private final java.util.Map<String, EditText> pModel = new java.util.HashMap<>();
+    private EditText customBase;
     private Switch wakeSw, convSw, lockSw;
     private EditText owner, passphrase, codeApp;
     private SeekBar rate, pitch;
@@ -69,10 +72,19 @@ public class SettingsActivity extends Activity {
         model = field("Model (change if replies fail with 'model not found')", prefs.model(), false);
 
         providerSp = spinner("Which AI brain to use", PROVIDERS, prefs.provider());
-        altKey = field("API key for Groq / OpenRouter / Mistral (only if you chose one of them)", prefs.altKey(), true);
-        altModel = field("Model for that provider (leave empty for the default)", "", false);
-        add(button("Get a free Groq key", v -> openUrl("https://console.groq.com/keys")));
-        add(button("Get a free OpenRouter key", v -> openUrl("https://openrouter.ai/settings/keys")));
+        col.addView(label("Fill several keys. If the chosen brain is busy or fails, Jarvis automatically tries the next one that has a key.", 12, DIM));
+        String[][] ps = {{"groq", "Groq"}, {"nvidia", "NVIDIA NIM"}, {"openrouter", "OpenRouter"}, {"mistral", "Mistral"}, {"custom", "Custom"}};
+        for (String[] pr : ps) {
+            if (pr[0].equals("custom")) {
+                customBase = field("Custom: base URL (e.g. https://api.cerebras.ai/v1)", prefs.raw("customBase"), false);
+            }
+            pKey.put(pr[0], field(pr[1] + " API key", prefs.keyFor(pr[0]), true));
+            pModel.put(pr[0], field(pr[1] + " model (empty = default)", prefs.raw("model_" + pr[0]), false));
+        }
+        add(button("Get free Groq key", v -> openUrl("https://console.groq.com/keys")));
+        add(button("Get free NVIDIA key", v -> openUrl("https://build.nvidia.com/settings/api-keys")));
+        add(button("Get free OpenRouter key", v -> openUrl("https://openrouter.ai/settings/keys")));
+        add(button("Get free Mistral key", v -> openUrl("https://console.mistral.ai/api-keys")));
 
         header("YOU");
         name = field("What should I call you?", prefs.name(), false);
@@ -82,6 +94,7 @@ public class SettingsActivity extends Activity {
         codeApp = field("Code app for 'write code' (app name, e.g. Pyroid or Notepad)", prefs.codeApp(), false);
 
         header("VOICE");
+        add(button("Install better voices (phone TTS settings)", v -> openTtsSettings()));
         voiceSp = spinner("Voice (free, on-phone). Change any time", VOICES, prefs.voicePreset());
         sttLang = spinner("I listen in", STT, prefs.sttLang());
         ttsLang = spinner("I speak English in", TTS, prefs.ttsLang());
@@ -212,8 +225,11 @@ public class SettingsActivity extends Activity {
         prefs.setBool("lock", lockSw.isChecked());
         prefs.setString("voicePreset", VOICES[voiceSp.getSelectedItemPosition()][1]);
         prefs.setString("provider", PROVIDERS[providerSp.getSelectedItemPosition()][1]);
-        prefs.setString("altKey", altKey.getText().toString().trim());
-        prefs.setString("altModel", altModel.getText().toString().trim());
+        for (String pk : pKey.keySet()) {
+            prefs.setString("key_" + pk, pKey.get(pk).getText().toString().trim());
+            prefs.setString("model_" + pk, pModel.get(pk).getText().toString().trim());
+        }
+        prefs.setString("customBase", customBase.getText().toString().trim());
         prefs.setString("codeApp", codeApp.getText().toString().trim());
         String on = owner.getText().toString().trim();
         prefs.setString("owner", on.isEmpty() ? "Shudhanshu" : on);
@@ -227,6 +243,17 @@ public class SettingsActivity extends Activity {
     }
 
     // ------------------------------------------------------------------ UI helpers
+
+    private void openTtsSettings() {
+        try {
+            startActivity(new android.content.Intent("com.android.settings.TTS_SETTINGS"));
+        } catch (Exception e) {
+            try {
+                startActivity(new android.content.Intent(android.provider.Settings.ACTION_SETTINGS));
+            } catch (Exception ignored) {
+            }
+        }
+    }
 
     private void openUrl(String url) {
         startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));

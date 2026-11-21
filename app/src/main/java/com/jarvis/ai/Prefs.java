@@ -23,37 +23,52 @@ final class Prefs {
         return (m.isEmpty() || m.equals("gemini-3.8-flash")) ? "gemini-3.5-flash" : m;
     }
 
-    /** gemini, groq, openrouter or mistral. */
-    String provider() { return sp.getString("provider", "gemini"); }
-    String altKey() { return sp.getString("altKey", "").trim(); }
+    String raw(String k) { return sp.getString(k, ""); }
 
-    String altBase() {
-        switch (provider()) {
+    /** gemini, groq, openrouter, mistral, nvidia or custom. */
+    String provider() { return sp.getString("provider", "gemini"); }
+    String altKey() { return keyFor(provider()); }
+    String keyFor(String p) { return sp.getString("key_" + p, "").trim(); }
+    String altBase() { return baseFor(provider()); }
+    String altModel() { return modelFor(provider()); }
+
+    String baseFor(String p) {
+        switch (p) {
             case "groq": return "https://api.groq.com/openai/v1";
             case "openrouter": return "https://openrouter.ai/api/v1";
             case "mistral": return "https://api.mistral.ai/v1";
+            case "nvidia": return "https://integrate.api.nvidia.com/v1";
+            case "custom": {
+                String u = sp.getString("customBase", "").trim();
+                while (u.endsWith("/")) u = u.substring(0, u.length() - 1);
+                return u;
+            }
             default: return "https://api.groq.com/openai/v1";
         }
     }
 
-    String altModel() {
-        String m = sp.getString("altModel", "").trim();
+    String modelFor(String p) {
+        String m = sp.getString("model_" + p, "").trim();
         if (!m.isEmpty()) return m;
-        switch (provider()) {
+        switch (p) {
             case "openrouter": return "openrouter/free";
             case "mistral": return "mistral-small-latest";
+            case "nvidia": return "meta/llama-3.3-70b-instruct";
+            case "custom": return "";
             default: return "openai/gpt-oss-20b";
         }
     }
-    String name() { return sp.getString("name", "sir").trim(); }
-    String city() { return sp.getString("city", "").trim(); }
-    String sttLang() { return sp.getString("sttLang", "en-IN"); }
-    String ttsLang() { return sp.getString("ttsLang", "en-GB"); }
-    String countryCode() { return sp.getString("cc", "91").trim(); }
-    boolean wake() { return sp.getBoolean("wake", false); }
-    boolean conv() { return sp.getBoolean("conv", true); }
-    float rate() { return sp.getFloat("rate", 1.0f); }
-    float pitch() { return sp.getFloat("pitch", 0.85f); }
+
+    /** Providers other than Gemini that have a key, selected one first. */
+    java.util.List<String> altChain() {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        String sel = provider();
+        if (!sel.equals("gemini") && !keyFor(sel).isEmpty()) out.add(sel);
+        for (String p : new String[]{"groq", "nvidia", "openrouter", "mistral", "custom"}) {
+            if (!out.contains(p) && !keyFor(p).isEmpty() && !baseFor(p).isEmpty()) out.add(p);
+        }
+        return out;
+    }
 
     /** jarvis, friday, desi_male or desi_female (phone voices, free and offline). */
     String voicePreset() { return sp.getString("voicePreset", "jarvis"); }
