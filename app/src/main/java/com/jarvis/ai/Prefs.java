@@ -23,6 +23,22 @@ final class Prefs {
         return (m.isEmpty() || m.equals("gemini-3.8-flash")) ? "gemini-3.5-flash" : m;
     }
 
+    String sarvamKey() { return sp.getString("sarvamKey", "").trim(); }
+
+    /** Sarvam Bulbul voice for the chosen preset, unless a name was typed in Settings. */
+    String sarvamVoice() {
+        String v = sp.getString("sarvamVoice", "").trim().toLowerCase(java.util.Locale.ROOT);
+        if (!v.isEmpty()) return v;
+        switch (voicePreset()) {
+            case "friday": return "priya";
+            case "desi_male": return "aditya";
+            case "desi_female": return "ritu";
+            case "us_male": return "rahul";
+            case "us_female": return "neha";
+            default: return "shubh";
+        }
+    }
+
     boolean speakerOn() { return sp.getBoolean("speakerOn", true); }
     float voiceThreshold() { return sp.getFloat("voiceThr", 0.40f); }
 

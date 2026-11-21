@@ -126,7 +126,8 @@ final class Tts {
             if (onDone != null) onDone.run();
             return;
         }
-        if (prefs.neuralOn() && Neural.installed(ctx)) speakNeural(text, onDone);
+        if (!prefs.sarvamKey().isEmpty() && Net.online(ctx)) speakSarvam(text, onDone);
+        else if (prefs.neuralOn() && Neural.installed(ctx)) speakNeural(text, onDone);
         else if (prefs.elevenOn() && Net.online(ctx)) speakEleven(text, onDone);
         else speakSystem(text, onDone, 0);
     }
@@ -242,6 +243,50 @@ final class Tts {
                     q.offer(new Failure("ElevenLabs error " + e.code + ": " + e.getMessage()));
                 } catch (Exception e) {
                     q.offer(new Failure("ElevenLabs could not be reached."));
+                }
+            }
+        });
+        pump(q, my, parts, 0, onDone);
+    }
+
+    private void speakSarvam(final String text, final Runnable onDone) {
+        stop();
+        final int my = egen;
+        final List<String> parts = chunks(text);
+        final LinkedBlockingQueue<Object> q = new LinkedBlockingQueue<>();
+        final String key = prefs.sarvamKey();
+        final String voice = prefs.sarvamVoice();
+        final boolean hindi = hasDevanagari(text);
+        final double pace = Math.max(0.6, Math.min(1.6, prefs.rate()));
+
+        net.execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    for (String part : parts) {
+                        if (my != egen) return;
+                        String body = J.obj("text", part, "target_language_code", hindi ? "hi-IN" : "en-IN",
+                                "speaker", voice, "model", "bulbul:v3", "pace", pace).toString();
+                        String resp = Http.postJsonHeader("https://api.sarvam.ai/text-to-speech", body,
+                                "api-subscription-key", key);
+                        org.json.JSONArray au = new org.json.JSONObject(resp).optJSONArray("audios");
+                        if (au == null || au.length() == 0) throw new java.io.IOException("empty audio");
+                        StringBuilder b64 = new StringBuilder();
+                        for (int i = 0; i < au.length(); i++) b64.append(au.optString(i));
+                        byte[] audio = android.util.Base64.decode(b64.toString(), android.util.Base64.DEFAULT);
+                        File f = File.createTempFile("tts", ".wav", ctx.getCacheDir());
+                        FileOutputStream os = new FileOutputStream(f);
+                        os.write(audio);
+                        os.close();
+                        q.put(f);
+                    }
+                    q.put(END);
+                } catch (Http.Err e) {
+                    String why = e.code == 403 || e.code == 401 ? "key rejected" : e.code == 429 ? "limit reached or no credit left"
+                            : "error " + e.code;
+                    q.offer(new Failure("Sarvam voice: " + why + "."));
+                } catch (Exception e) {
+                    q.offer(new Failure("Sarvam voice could not be reached."));
                 }
             }
         });
@@ -400,7 +445,8 @@ final class Tts {
                 String n = v.getName().toLowerCase(Locale.ROOT);
                 int sc = 0;
                 if (loc.getCountry().equals(v.getLocale().getCountry())) sc += 2;
-                if (!v.isNetworkConnectionRequired()) sc += 1;
+                sc += v.getQuality() / 100;
+                if (!v.isNetworkConnectionRequired() && !Net.online(ctx)) sc += 3;
                 boolean f = n.contains("female") || n.contains("-gba") || n.contains("-gbc") || n.contains("-hia")
                         || n.contains("-hic") || n.contains("-ena") || n.contains("-enc") || n.contains("-sfg")
                         || n.contains("-iob") || n.contains("-iog");

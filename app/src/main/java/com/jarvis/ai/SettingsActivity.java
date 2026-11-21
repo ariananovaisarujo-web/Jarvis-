@@ -45,7 +45,7 @@ public class SettingsActivity extends Activity {
     private Spinner sttLang, ttsLang, providerSp, voiceSp;
     private final java.util.Map<String, EditText> pKey = new java.util.HashMap<>();
     private final java.util.Map<String, EditText> pModel = new java.util.HashMap<>();
-    private EditText customBase, pinField, patField;
+    private EditText customBase, pinField, patField, sarvamKey, sarvamVoice;
     private TextView vpStatus;
     private Switch spkSw;
     private SeekBar thrBar;
@@ -102,6 +102,10 @@ public class SettingsActivity extends Activity {
         codeApp = field("Code app for 'write code' (app name, e.g. Pyroid or Notepad)", prefs.codeApp(), false);
 
         header("VOICE");
+        col.addView(label("BEST HINDI VOICE (Sarvam, natural Indian voices, free credits on signup). Leave empty to skip.", 12, DIM));
+        sarvamKey = field("Sarvam API key", prefs.sarvamKey(), true);
+        sarvamVoice = field("Sarvam voice name (optional; empty = automatic from the voice choice below)", prefs.raw("sarvamVoice"), false);
+        add(button("Get free Sarvam key", v -> openUrl("https://dashboard.sarvam.ai")));
         hdStatus = label(Neural.installed(this) ? "HD voice: ready (offline)" : "HD voice: not downloaded yet", 13, DIM);
         col.addView(hdStatus);
         add(button("Download HD natural voices (130 MB, one time)", v -> downloadHd()));
@@ -252,6 +256,8 @@ public class SettingsActivity extends Activity {
         prefs.setBool("conv", convSw.isChecked());
         prefs.setBool("lock", lockSw.isChecked());
         prefs.setBool("neuralOn", hdSw.isChecked());
+        prefs.setString("sarvamKey", sarvamKey.getText().toString().trim());
+        prefs.setString("sarvamVoice", sarvamVoice.getText().toString().trim());
         prefs.setBool("speakerOn", spkSw.isChecked());
         prefs.setFloat("voiceThr", Math.max(0.1f, thrBar.getProgress() / 100f));
         String pat = patField.getText().toString().trim();
