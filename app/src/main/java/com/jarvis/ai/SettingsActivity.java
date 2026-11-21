@@ -105,6 +105,7 @@ public class SettingsActivity extends Activity {
         hdStatus = label(Neural.installed(this) ? "HD voice: ready (offline)" : "HD voice: not downloaded yet", 13, DIM);
         col.addView(hdStatus);
         add(button("Download HD natural voices (130 MB, one time)", v -> downloadHd()));
+        add(button("Test HD voice", v -> testHd()));
         hdSw = toggle("Use HD voice when available", prefs.neuralOn());
         add(button("Phone voice settings", v -> openTtsSettings()));
         voiceSp = spinner("Voice (free, on-phone). Change any time", VOICES, prefs.voicePreset());
@@ -350,6 +351,24 @@ public class SettingsActivity extends Activity {
         runOnUiThread(new Runnable() {
             @Override public void run() { vpStatus.setText(m); }
         });
+    }
+
+    private void testHd() {
+        if (hdBusy) return;
+        hdBusy = true;
+        hdStatus.setText("Testing HD voice... (first load can take 10-20 seconds)");
+        final android.content.Context app = getApplicationContext();
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                final String r = Neural.selfTest(app);
+                hdBusy = false;
+                runOnUiThread(new Runnable() {
+                    @Override public void run() { hdStatus.setText(r); }
+                });
+                if (r.startsWith("OK")) Jarvis.get(app).say("Hello sir. I am Jarvis. The HD voice is working.");
+            }
+        }).start();
     }
 
     private void downloadHd() {

@@ -167,6 +167,43 @@ final class Neural {
         return engine;
     }
 
+    /** Loads the engine and makes a short sentence. Returns a plain-English result, never throws. */
+    static String selfTest(Context c) {
+        try {
+            if (!installed(c)) return "Voice pack is not downloaded yet.";
+            StringBuilder files = new StringBuilder();
+            for (String f : new String[]{"model.int8.onnx", "voices.bin", "tokens.txt", "lexicon-us-en.txt",
+                    "espeak-ng-data/phontab", "espeak-ng-data/phondata", "espeak-ng-data/phonindex",
+                    "espeak-ng-data/intonations"}) {
+                File x = new File(dir(c), f);
+                if (!x.exists() || x.length() == 0) files.append(f).append(' ');
+            }
+            if (files.length() > 0) return "Missing files: " + files + "- tap Download again.";
+            long t0 = System.currentTimeMillis();
+            OfflineTts e = engine(c);
+            long t1 = System.currentTimeMillis();
+            com.k2fsa.sherpa.onnx.GeneratedAudio a = e.generateWithConfigAndCallback("Hello sir, I am Jarvis.",
+                    config("jarvis", false, 1.0f), new com.k2fsa.sherpa.onnx.OfflineTtsCallback() {
+                        @Override
+                        public Integer invoke(float[] samples) {
+                            return 1;
+                        }
+                    });
+            long t2 = System.currentTimeMillis();
+            int n = a.getSamples() == null ? 0 : a.getSamples().length;
+            return "OK. Engine loaded in " + (t1 - t0) + " ms, spoke " + (n / (float) a.getSampleRate()) + " s of audio in "
+                    + (t2 - t1) + " ms.";
+        } catch (Throwable t) {
+            StringBuilder sb = new StringBuilder("HD voice error: ").append(t);
+            StackTraceElement[] st = t.getStackTrace();
+            for (int i = 0; i < Math.min(3, st.length); i++) sb.append("\n  at ").append(st[i]);
+            synchronized (Neural.class) {
+                engine = null;
+            }
+            return sb.toString();
+        }
+    }
+
     /** Speaker IDs in the Kokoro v1.0 voice table. */
     static int sid(String preset, boolean hindi) {
         switch (preset) {

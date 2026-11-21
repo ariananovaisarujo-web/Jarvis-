@@ -129,6 +129,16 @@ final class Jarvis {
         });
     }
 
+    /** Speaks a line out loud (used by the Settings voice test). */
+    void say(final String text) {
+        main.post(new Runnable() {
+            @Override
+            public void run() {
+                if (state == State.IDLE) tts.speak(text, null);
+            }
+        });
+    }
+
     void stopAll() {
         main.post(new Runnable() {
             @Override public void run() { stopNow(); }

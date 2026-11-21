@@ -193,7 +193,7 @@ final class Tts {
                     if (my == egen && track == null) throw new IllegalStateException("no audio");
                 } catch (final Throwable t) {
                     if (my == egen) {
-                        final String msg = "HD voice failed, using the phone voice. " + t.getClass().getSimpleName();
+                        final String msg = "HD voice failed, using the phone voice. " + t;
                         main.post(new Runnable() {
                             @Override
                             public void run() {
