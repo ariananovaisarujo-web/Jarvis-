@@ -18,7 +18,33 @@ final class Prefs {
     }
 
     String apiKey() { return sp.getString("apiKey", "").trim(); }
-    String model() { return sp.getString("model", "gemini-3.8-flash").trim(); }
+    String model() {
+        String m = sp.getString("model", "gemini-3.5-flash").trim();
+        return (m.isEmpty() || m.equals("gemini-3.8-flash")) ? "gemini-3.5-flash" : m;
+    }
+
+    /** gemini, groq, openrouter or mistral. */
+    String provider() { return sp.getString("provider", "gemini"); }
+    String altKey() { return sp.getString("altKey", "").trim(); }
+
+    String altBase() {
+        switch (provider()) {
+            case "groq": return "https://api.groq.com/openai/v1";
+            case "openrouter": return "https://openrouter.ai/api/v1";
+            case "mistral": return "https://api.mistral.ai/v1";
+            default: return "https://api.groq.com/openai/v1";
+        }
+    }
+
+    String altModel() {
+        String m = sp.getString("altModel", "").trim();
+        if (!m.isEmpty()) return m;
+        switch (provider()) {
+            case "openrouter": return "openrouter/free";
+            case "mistral": return "mistral-small-latest";
+            default: return "openai/gpt-oss-120b";
+        }
+    }
     String name() { return sp.getString("name", "sir").trim(); }
     String city() { return sp.getString("city", "").trim(); }
     String sttLang() { return sp.getString("sttLang", "en-IN"); }

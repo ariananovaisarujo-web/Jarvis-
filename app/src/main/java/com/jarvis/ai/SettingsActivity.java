@@ -28,13 +28,17 @@ public class SettingsActivity extends Activity {
 
     private static final String[][] STT = {
             {"English (India)", "en-IN"}, {"Hindi", "hi-IN"}, {"English (US)", "en-US"}, {"English (UK)", "en-GB"}};
+    private static final String[][] PROVIDERS = {
+            {"Google Gemini", "gemini"}, {"Groq (fast, free tier)", "groq"},
+            {"OpenRouter (free models)", "openrouter"}, {"Mistral", "mistral"}};
     private static final String[][] TTS = {
             {"British (classic Jarvis)", "en-GB"}, {"Indian English", "en-IN"}, {"US English", "en-US"}};
 
     private Prefs prefs;
     private LinearLayout col;
     private EditText key, model, name, city, cc, elevenKey, elevenVoice, elevenModel;
-    private Spinner sttLang, ttsLang;
+    private Spinner sttLang, ttsLang, providerSp;
+    private EditText altKey, altModel;
     private Switch wakeSw, convSw, lockSw;
     private EditText owner, passphrase, codeApp;
     private SeekBar rate, pitch;
@@ -60,6 +64,12 @@ public class SettingsActivity extends Activity {
         key = field("Gemini API key", prefs.apiKey(), true);
         add(button("Get a free Gemini API key", v -> openUrl("https://aistudio.google.com/apikey")));
         model = field("Model (change if replies fail with 'model not found')", prefs.model(), false);
+
+        providerSp = spinner("Which AI brain to use", PROVIDERS, prefs.provider());
+        altKey = field("API key for Groq / OpenRouter / Mistral (only if you chose one of them)", prefs.altKey(), true);
+        altModel = field("Model for that provider (leave empty for the default)", "", false);
+        add(button("Get a free Groq key", v -> openUrl("https://console.groq.com/keys")));
+        add(button("Get a free OpenRouter key", v -> openUrl("https://openrouter.ai/settings/keys")));
 
         header("YOU");
         name = field("What should I call you?", prefs.name(), false);
@@ -182,7 +192,7 @@ public class SettingsActivity extends Activity {
     private void save() {
         prefs.setString("apiKey", key.getText().toString().trim());
         String m = model.getText().toString().trim();
-        prefs.setString("model", m.isEmpty() ? "gemini-3.8-flash" : m);
+        prefs.setString("model", m.isEmpty() ? "gemini-3.5-flash" : m);
         String n = name.getText().toString().trim();
         prefs.setString("name", n.isEmpty() ? "sir" : n);
         prefs.setString("city", city.getText().toString().trim());
@@ -196,6 +206,9 @@ public class SettingsActivity extends Activity {
         prefs.setString("elevenModel", em.isEmpty() ? "eleven_flash_v2_5" : em);
         prefs.setBool("conv", convSw.isChecked());
         prefs.setBool("lock", lockSw.isChecked());
+        prefs.setString("provider", PROVIDERS[providerSp.getSelectedItemPosition()][1]);
+        prefs.setString("altKey", altKey.getText().toString().trim());
+        prefs.setString("altModel", altModel.getText().toString().trim());
         prefs.setString("codeApp", codeApp.getText().toString().trim());
         String on = owner.getText().toString().trim();
         prefs.setString("owner", on.isEmpty() ? "Shudhanshu" : on);

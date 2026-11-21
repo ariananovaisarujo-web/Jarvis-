@@ -52,6 +52,25 @@ final class Http {
         }
     }
 
+    static String postJsonHeader(String url, String body, String headerName, String headerValue)
+            throws IOException, Err {
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+        c.setConnectTimeout(20000);
+        c.setReadTimeout(90000);
+        c.setRequestMethod("POST");
+        c.setDoOutput(true);
+        c.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+        c.setRequestProperty(headerName, headerValue);
+        try {
+            OutputStream os = c.getOutputStream();
+            os.write(body.getBytes(StandardCharsets.UTF_8));
+            os.close();
+            return read(c);
+        } finally {
+            c.disconnect();
+        }
+    }
+
     /** POST a JSON body and return the raw response bytes (used for ElevenLabs audio). */
     static byte[] postForBytes(String url, String body, String headerName, String headerValue)
             throws IOException, Err {

@@ -48,6 +48,7 @@ final class Jarvis {
     final Prefs prefs;
     final Tools tools;
     final Gemini gemini;
+    final OpenAiChat alt;
     private final Stt stt;
     private final Tts tts;
 
@@ -82,6 +83,7 @@ final class Jarvis {
         prefs = new Prefs(c);
         tools = new Tools(c, prefs);
         gemini = new Gemini(prefs, tools);
+        alt = new OpenAiChat(prefs, tools);
         stt = new Stt(c);
         tts = new Tts(c, prefs);
         tts.notice = msg -> log("system", msg);
@@ -153,7 +155,7 @@ final class Jarvis {
 
     void clearConversation() {
         bg.execute(new Runnable() {
-            @Override public void run() { gemini.reset(); }
+            @Override public void run() { gemini.reset(); alt.reset(); }
         });
         main.post(new Runnable() {
             @Override public void run() { history.clear(); }
@@ -365,6 +367,7 @@ final class Jarvis {
             r.text = "Sir, is kaam ke liye internet chahiye. Net on kar dijiye, phir main kar dunga.";
             return r;
         }
+        if (!"gemini".equals(prefs.provider())) return alt.ask(text, gemini.systemPrompt());
         return gemini.ask(text);
     }
 

@@ -18,7 +18,7 @@ final class Gemini {
     }
 
     private static final String BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
-    private static final String[] FALLBACKS = {"gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-flash-latest"};
+    private static final String[] FALLBACKS = {"gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-flash-latest", "gemini-3.8-flash"};
 
     private final Prefs prefs;
     private final Tools tools;
@@ -184,7 +184,7 @@ final class Gemini {
                 return out;
             } catch (Http.Err e) {
                 last = e;
-                if (e.code != 404) throw e;
+                if (e.code != 404 && e.code != 429) throw e;
             }
         }
         throw last != null ? last : new Http.Err(404, "model not found");
@@ -225,7 +225,7 @@ final class Gemini {
         return s.replace("**", "").replace("__", "").replace("`", "").replaceAll("(?m)^\\s*[*#]+\\s+", "").trim();
     }
 
-    private String systemPrompt() {
+    String systemPrompt() {
         String date = new SimpleDateFormat("EEEE, d MMMM yyyy, h:mm a", Locale.ENGLISH).format(new Date());
         StringBuilder sb = new StringBuilder();
         sb.append("You are J.A.R.V.I.S. (Just A Rather Very Intelligent System), a personal AI assistant living on the user's Android phone, modelled on Tony Stark's assistant. ");
