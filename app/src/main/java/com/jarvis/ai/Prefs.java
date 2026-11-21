@@ -42,7 +42,7 @@ final class Prefs {
         switch (provider()) {
             case "openrouter": return "openrouter/free";
             case "mistral": return "mistral-small-latest";
-            default: return "openai/gpt-oss-120b";
+            default: return "openai/gpt-oss-20b";
         }
     }
     String name() { return sp.getString("name", "sir").trim(); }
@@ -54,6 +54,9 @@ final class Prefs {
     boolean conv() { return sp.getBoolean("conv", true); }
     float rate() { return sp.getFloat("rate", 1.0f); }
     float pitch() { return sp.getFloat("pitch", 0.85f); }
+
+    /** jarvis, friday, desi_male or desi_female (phone voices, free and offline). */
+    String voicePreset() { return sp.getString("voicePreset", "jarvis"); }
 
     String elevenKey() { return sp.getString("elevenKey", "").trim(); }
     String elevenVoice() { return sp.getString("elevenVoice", "").trim(); }

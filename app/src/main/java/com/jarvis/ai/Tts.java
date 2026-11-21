@@ -266,30 +266,49 @@ final class Tts {
     }
 
     private void applyVoice(boolean hindi) {
-        Locale loc = hindi ? new Locale("hi", "IN") : Locale.forLanguageTag(prefs.ttsLang());
+        String preset = prefs.voicePreset();
+        boolean female = preset.equals("friday") || preset.equals("desi_female");
+        Locale loc;
+        if (hindi) loc = new Locale("hi", "IN");
+        else if (preset.startsWith("desi")) loc = new Locale("en", "IN");
+        else loc = Locale.forLanguageTag(prefs.ttsLang());
         int r = tts.setLanguage(loc);
         if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) {
             tts.setLanguage(Locale.US);
-        } else if (!hindi && "GB".equals(loc.getCountry())) {
-            pickMaleVoice(loc);
+        } else {
+            pickVoice(loc, female);
         }
         tts.setSpeechRate(prefs.rate());
-        tts.setPitch(prefs.pitch());
+        float p = prefs.pitch();
+        if (preset.equals("friday")) p = Math.max(p, 1.15f);
+        else if (preset.equals("desi_female")) p = Math.max(p, 1.1f);
+        else if (preset.equals("jarvis")) p = Math.min(p, 0.85f);
+        tts.setPitch(p);
     }
 
-    private void pickMaleVoice(Locale loc) {
+    private void pickVoice(Locale loc, boolean female) {
         try {
             Set<Voice> voices = tts.getVoices();
             if (voices == null) return;
+            Voice best = null;
+            int bestScore = -1;
             for (Voice v : voices) {
+                if (!loc.getLanguage().equals(v.getLocale().getLanguage())) continue;
                 String n = v.getName().toLowerCase(Locale.ROOT);
-                if (loc.equals(v.getLocale()) && !v.isNetworkConnectionRequired()
-                        && !n.contains("female")
-                        && (n.contains("gbb") || n.contains("gbd") || n.contains("rjs") || n.contains("male"))) {
-                    tts.setVoice(v);
-                    return;
-                }
+                int sc = 0;
+                if (loc.getCountry().equals(v.getLocale().getCountry())) sc += 2;
+                if (!v.isNetworkConnectionRequired()) sc += 1;
+                boolean f = n.contains("female") || n.contains("-gba") || n.contains("-gbc") || n.contains("-hia")
+                        || n.contains("-hic") || n.contains("-ena") || n.contains("-enc") || n.contains("-sfg")
+                        || n.contains("-iob") || n.contains("-iog");
+                boolean m = !f && (n.contains("male") || n.contains("-gbb") || n.contains("-gbd") || n.contains("-rjs")
+                        || n.contains("-hid") || n.contains("-hie") || n.contains("-end") || n.contains("-iol")
+                        || n.contains("-ioc"));
+                if (female && f) sc += 4;
+                if (!female && m) sc += 4;
+                if (sc > bestScore) { bestScore = sc; best = v; }
             }
+            if (best != null) tts.setVoice(best);
         } catch (Exception ignored) {
         }
     }

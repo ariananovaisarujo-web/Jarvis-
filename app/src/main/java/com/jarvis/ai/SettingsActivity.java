@@ -28,6 +28,9 @@ public class SettingsActivity extends Activity {
 
     private static final String[][] STT = {
             {"English (India)", "en-IN"}, {"Hindi", "hi-IN"}, {"English (US)", "en-US"}, {"English (UK)", "en-GB"}};
+    private static final String[][] VOICES = {
+            {"Jarvis (deep British male)", "jarvis"}, {"Friday (female)", "friday"},
+            {"Desi male (Indian accent)", "desi_male"}, {"Desi female (Indian accent)", "desi_female"}};
     private static final String[][] PROVIDERS = {
             {"Google Gemini", "gemini"}, {"Groq (fast, free tier)", "groq"},
             {"OpenRouter (free models)", "openrouter"}, {"Mistral", "mistral"}};
@@ -37,7 +40,7 @@ public class SettingsActivity extends Activity {
     private Prefs prefs;
     private LinearLayout col;
     private EditText key, model, name, city, cc, elevenKey, elevenVoice, elevenModel;
-    private Spinner sttLang, ttsLang, providerSp;
+    private Spinner sttLang, ttsLang, providerSp, voiceSp;
     private EditText altKey, altModel;
     private Switch wakeSw, convSw, lockSw;
     private EditText owner, passphrase, codeApp;
@@ -79,6 +82,7 @@ public class SettingsActivity extends Activity {
         codeApp = field("Code app for 'write code' (app name, e.g. Pyroid or Notepad)", prefs.codeApp(), false);
 
         header("VOICE");
+        voiceSp = spinner("Voice (free, on-phone). Change any time", VOICES, prefs.voicePreset());
         sttLang = spinner("I listen in", STT, prefs.sttLang());
         ttsLang = spinner("I speak English in", TTS, prefs.ttsLang());
         rate = seek("Speaking speed", prefs.rate());
@@ -206,6 +210,7 @@ public class SettingsActivity extends Activity {
         prefs.setString("elevenModel", em.isEmpty() ? "eleven_flash_v2_5" : em);
         prefs.setBool("conv", convSw.isChecked());
         prefs.setBool("lock", lockSw.isChecked());
+        prefs.setString("voicePreset", VOICES[voiceSp.getSelectedItemPosition()][1]);
         prefs.setString("provider", PROVIDERS[providerSp.getSelectedItemPosition()][1]);
         prefs.setString("altKey", altKey.getText().toString().trim());
         prefs.setString("altModel", altModel.getText().toString().trim());

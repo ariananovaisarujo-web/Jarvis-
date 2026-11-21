@@ -55,7 +55,7 @@ final class OpenAiChat {
             all.put(J.obj("role", "system", "content", system));
             for (int i = 0; i < msgs.length(); i++) all.put(msgs.opt(i));
             JSONObject req = J.obj("model", prefs.altModel(), "messages", all,
-                    "tools", defs, "tool_choice", "auto", "temperature", 0.7);
+                    "tools", defs, "tool_choice", "auto", "temperature", 0.8, "max_tokens", 400);
 
             String body;
             try {
