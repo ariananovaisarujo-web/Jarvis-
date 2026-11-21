@@ -2,6 +2,7 @@ package com.jarvis.ai;
 
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.media.AudioManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.speech.SpeechRecognizer;
@@ -144,6 +145,7 @@ final class Jarvis {
                     if (state == State.IDLE) scheduleWake(0);
                 } else {
                     main.removeCallbacks(wakeRun);
+                    quiet(false);
                     if (wakeListening) {
                         stt.cancel();
                         wakeListening = false;
@@ -175,12 +177,48 @@ final class Jarvis {
         for (Listener l : listeners) l.onLog(who, text);
     }
 
+    private boolean beepsMuted;
+
+    /**
+     * The speech recognizer plays a "ding" every time it starts or stops. In the always-on wake loop
+     * that repeats all day, so those streams are muted while only waiting for the wake word.
+     */
+    private void quiet(boolean on) {
+        try {
+            AudioManager am = (AudioManager) ctx.getSystemService(Context.AUDIO_SERVICE);
+            if (am == null) return;
+            if (on && !am.isMusicActive()) {
+                if (!beepsMuted) {
+                    int[] st = {AudioManager.STREAM_MUSIC, AudioManager.STREAM_SYSTEM, AudioManager.STREAM_NOTIFICATION};
+                    for (int x : st) {
+                        try {
+                            am.adjustStreamVolume(x, AudioManager.ADJUST_MUTE, 0);
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    beepsMuted = true;
+                }
+            } else if (beepsMuted) {
+                int[] st = {AudioManager.STREAM_MUSIC, AudioManager.STREAM_SYSTEM, AudioManager.STREAM_NOTIFICATION};
+                for (int x : st) {
+                    try {
+                        am.adjustStreamVolume(x, AudioManager.ADJUST_UNMUTE, 0);
+                    } catch (Exception ignored) {
+                    }
+                }
+                beepsMuted = false;
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
     private boolean hasMic() {
         return ctx.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
                 == PackageManager.PERMISSION_GRANTED;
     }
 
     private void stopNow() {
+        quiet(false);
         gen++;
         awaitingPass = false;
         stt.cancel();
@@ -216,6 +254,7 @@ final class Jarvis {
             setState(State.LISTENING);
         }
         wakeListening = wake;
+        quiet(wake);
         stt.capture = speakerLock();
         stt.start(prefs.sttLang(), wake || !Net.online(ctx), !wake, new Stt.Cb() {
             @Override
@@ -265,6 +304,7 @@ final class Jarvis {
     }
 
     private void wakeHit(String cmd) {
+        quiet(false);
         if (cmd.length() >= 3) {
             heard(cmd);
             return;
@@ -317,6 +357,7 @@ final class Jarvis {
 
     /** A spoken command: first check that it is the owner's voice, then handle it. */
     private void heard(final String text) {
+        quiet(false);
         if (!speakerLock() || (awaitingPass && System.currentTimeMillis() < passDeadline)) {
             handle(text, true);
             return;
@@ -351,6 +392,7 @@ final class Jarvis {
     }
 
     private void handle(final String text, final boolean voice) {
+        quiet(false);
         final int my = ++gen;
         stt.cancel();
         tts.stop();
