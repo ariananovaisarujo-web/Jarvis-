@@ -216,6 +216,7 @@ final class Jarvis {
             setState(State.LISTENING);
         }
         wakeListening = wake;
+        stt.capture = speakerLock();
         stt.start(prefs.sttLang(), wake || !Net.online(ctx), !wake, new Stt.Cb() {
             @Override
             public void onRms(float db) {
@@ -248,7 +249,7 @@ final class Jarvis {
             toIdle();
             return;
         }
-        handle(text, true);
+        heard(text);
     }
 
     private void onWakeResult(List<String> alts) {
@@ -265,7 +266,7 @@ final class Jarvis {
 
     private void wakeHit(String cmd) {
         if (cmd.length() >= 3) {
-            handle(cmd, true);
+            heard(cmd);
             return;
         }
         gen++;
@@ -308,6 +309,45 @@ final class Jarvis {
             else log("system", "Speech recognition error " + code + ".");
         }
         toIdle();
+    }
+
+    private boolean speakerLock() {
+        return prefs.lockOn() && prefs.speakerOn() && VoicePrint.enrolled(prefs) && VoicePrint.modelReady(ctx);
+    }
+
+    /** A spoken command: first check that it is the owner's voice, then handle it. */
+    private void heard(final String text) {
+        if (!speakerLock() || (awaitingPass && System.currentTimeMillis() < passDeadline)) {
+            handle(text, true);
+            return;
+        }
+        final short[] audio = stt.takeAudio();
+        final int my = ++gen;
+        setState(State.THINKING);
+        bg.execute(new Runnable() {
+            @Override
+            public void run() {
+                final VoicePrint.Result r = VoicePrint.verify(ctx, prefs, audio);
+                main.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (my != gen) return;
+                        if (r.status == VoicePrint.Status.MATCH) {
+                            log("system", "Voice matched (" + Math.round(r.score * 100) + "%).");
+                            authUntil = System.currentTimeMillis() + 10 * 60 * 1000L;
+                            handle(text, true);
+                        } else if (r.status == VoicePrint.Status.MISMATCH) {
+                            log("system", "Voice not recognised (" + Math.round(r.score * 100) + "%, need "
+                                    + Math.round(prefs.voiceThreshold() * 100) + "%).");
+                            denied(my);
+                        } else {
+                            log("system", "Could not check your voice (" + r.note + "). Passphrase will be needed for protected actions.");
+                            handle(text, true);
+                        }
+                    }
+                });
+            }
+        });
     }
 
     private void handle(final String text, final boolean voice) {

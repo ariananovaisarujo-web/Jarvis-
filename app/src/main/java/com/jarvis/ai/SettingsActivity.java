@@ -45,7 +45,11 @@ public class SettingsActivity extends Activity {
     private Spinner sttLang, ttsLang, providerSp, voiceSp;
     private final java.util.Map<String, EditText> pKey = new java.util.HashMap<>();
     private final java.util.Map<String, EditText> pModel = new java.util.HashMap<>();
-    private EditText customBase;
+    private EditText customBase, pinField;
+    private TextView vpStatus;
+    private Switch spkSw;
+    private SeekBar thrBar;
+    private volatile boolean vpBusy;
     private TextView hdStatus;
     private Switch hdSw;
     private volatile boolean hdBusy;
@@ -121,6 +125,18 @@ public class SettingsActivity extends Activity {
         header("OWNER LOCK");
         lockSw = toggle("Protect sensitive actions (unlock, call, SMS, WhatsApp, email, screen control)", prefs.lock());
         owner = field("Owner name (shown to strangers)", prefs.ownerName(), false);
+        vpStatus = label(vpText(), 13, DIM);
+        col.addView(vpStatus);
+        spkSw = toggle("Obey only my voice (voice-ID)", prefs.speakerOn());
+        add(button("Record my voice (5 short samples)", v -> enrollVoice()));
+        col.addView(label("Voice match strictness (higher = stricter). If it rejects you, lower it. Each command shows its match score in the chat.", 12, DIM));
+        thrBar = new SeekBar(this);
+        thrBar.setMax(100);
+        thrBar.setProgress(Math.round(prefs.voiceThreshold() * 100));
+        add(thrBar);
+        pinField = field("Phone unlock PIN (digits only, saved encrypted on this phone; leave empty to keep the current one)", "", true);
+        pinField.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        add(button("Remove saved PIN", v -> { PinVault.clear(this); vpStatus.setText(vpText()); }));
         passphrase = field(prefs.passSet()
                 ? "New passphrase (a phrase only you know; leave empty to keep the current one)"
                 : "Set your passphrase (a phrase only you know, 2 to 4 words). Required to use protected actions.",
@@ -232,6 +248,16 @@ public class SettingsActivity extends Activity {
         prefs.setBool("conv", convSw.isChecked());
         prefs.setBool("lock", lockSw.isChecked());
         prefs.setBool("neuralOn", hdSw.isChecked());
+        prefs.setBool("speakerOn", spkSw.isChecked());
+        prefs.setFloat("voiceThr", Math.max(0.1f, thrBar.getProgress() / 100f));
+        String pin = pinField.getText().toString().trim();
+        if (!pin.isEmpty()) {
+            try {
+                PinVault.save(this, pin);
+            } catch (Exception e) {
+                android.widget.Toast.makeText(this, "Could not save the PIN securely.", android.widget.Toast.LENGTH_LONG).show();
+            }
+        }
         prefs.setString("voicePreset", VOICES[voiceSp.getSelectedItemPosition()][1]);
         prefs.setString("provider", PROVIDERS[providerSp.getSelectedItemPosition()][1]);
         for (String pk : pKey.keySet()) {
@@ -252,6 +278,79 @@ public class SettingsActivity extends Activity {
     }
 
     // ------------------------------------------------------------------ UI helpers
+
+    private String vpText() {
+        return "Voice-ID: " + (VoicePrint.enrolled(prefs) ? "your voice is saved" : "not recorded yet")
+                + ".  Phone PIN: " + (PinVault.has(this) ? "saved (encrypted)" : "not saved") + ".";
+    }
+
+    private void enrollVoice() {
+        if (vpBusy) return;
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            MainActivity.requestAllPermissions(this);
+            return;
+        }
+        if (!VoicePrint.modelReady(this) && !Net.online(this)) {
+            vpStatus.setText("Turn on the internet once to download the voice-ID model (26 MB), then tap again.");
+            return;
+        }
+        vpBusy = true;
+        final android.content.Context app = getApplicationContext();
+        final Jarvis j = Jarvis.get(app);
+        final boolean wasWake = j.wakeActive();
+        j.setWake(false);
+        j.stopAll();
+        final String[] phrases = {
+                "Jarvis, mera phone open karo",
+                "Aaj ka mausam kaisa hai",
+                "Jarvis, gaana chala do",
+                "Mujhe aaj ki taaza khabar batao",
+                "Jarvis, subah chhe baje ka alarm laga do"};
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                String result;
+                try {
+                    if (!VoicePrint.modelReady(app)) {
+                        ui("Downloading voice-ID model...");
+                        VoicePrint.downloadModel(app);
+                    }
+                    java.util.List<float[]> embs = new java.util.ArrayList<>();
+                    int tries = 0;
+                    while (embs.size() < phrases.length && tries < 9) {
+                        String ph = phrases[embs.size()];
+                        ui("Get ready... then say clearly (" + (embs.size() + 1) + "/5):\n\"" + ph + "\"");
+                        Thread.sleep(1800);
+                        ui("Speak now (" + (embs.size() + 1) + "/5):\n\"" + ph + "\"");
+                        short[] pcm = VoicePrint.record(4500);
+                        float[] e = VoicePrint.embed(app, pcm);
+                        tries++;
+                        if (e == null) {
+                            ui("I could not hear you clearly. Speak louder and try again.");
+                            Thread.sleep(1500);
+                            continue;
+                        }
+                        embs.add(e);
+                    }
+                    if (embs.size() < phrases.length) throw new java.io.IOException("Not enough clear samples.");
+                    VoicePrint.saveEnrollment(prefs, embs);
+                    result = "Done. " + vpText();
+                } catch (Throwable t) {
+                    String m = t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage();
+                    result = "Voice recording failed: " + m;
+                }
+                vpBusy = false;
+                if (wasWake) j.setWake(true);
+                ui(result);
+            }
+        }).start();
+    }
+
+    private void ui(final String m) {
+        runOnUiThread(new Runnable() {
+            @Override public void run() { vpStatus.setText(m); }
+        });
+    }
 
     private void downloadHd() {
         if (hdBusy) return;

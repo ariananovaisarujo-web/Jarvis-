@@ -407,11 +407,43 @@ final class Tools {
     private String unlockPhone() {
         launch(new Intent(c, UnlockActivity.class));
         KeyguardManager km = (KeyguardManager) c.getSystemService(Context.KEYGUARD_SERVICE);
-        if (km != null && km.isDeviceSecure()) {
-            return "Screen turned on. The phone has a PIN, pattern or fingerprint lock, so the owner must enter it. "
-                    + "Automatic PIN entry is not enabled.";
+        if (km == null || !km.isDeviceSecure()) return "Phone unlocked.";
+        if (!PinVault.has(c)) {
+            return "Screen turned on. The phone has a lock but no PIN is saved in Jarvis Settings, so the owner must enter it.";
         }
-        return "Phone unlocked.";
+        JarvisAccessibility svc = JarvisAccessibility.get();
+        if (svc == null) return A11Y_OFF;
+        String pin = PinVault.load(c);
+        if (pin == null || pin.isEmpty()) return "The saved PIN could not be read. Please save it again in Settings.";
+        try {
+            Thread.sleep(1600);
+            if (!km.isKeyguardLocked()) return "Phone unlocked.";
+            String first = svc.tap(pin.substring(0, 1));
+            if (first.startsWith("Nothing") || first.startsWith("Cannot")) {
+                svc.swipeUp();
+                Thread.sleep(900);
+                first = svc.tap(pin.substring(0, 1));
+                if (first.startsWith("Nothing") || first.startsWith("Cannot")) {
+                    return "I could not find the PIN pad on the lock screen. The owner must enter the PIN.";
+                }
+            }
+            for (int i = 1; i < pin.length(); i++) {
+                Thread.sleep(160);
+                String r = svc.tap(pin.substring(i, i + 1));
+                if (r.startsWith("Nothing") || r.startsWith("Cannot")) {
+                    Thread.sleep(500);
+                    svc.tap(pin.substring(i, i + 1));
+                }
+            }
+            Thread.sleep(250);
+            svc.tap("Enter");
+            Thread.sleep(1300);
+        } catch (InterruptedException e) {
+            return "Unlock interrupted.";
+        }
+        return km.isKeyguardLocked()
+                ? "I entered the PIN but the phone is still locked. Please check the PIN saved in Settings."
+                : "Phone unlocked.";
     }
 
     private String global(int action, int minSdk, String okMsg) {

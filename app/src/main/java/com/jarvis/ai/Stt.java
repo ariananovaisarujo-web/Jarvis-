@@ -2,6 +2,9 @@ package com.jarvis.ai;
 
 import android.content.Context;
 import android.content.Intent;
+import android.media.AudioFormat;
+import android.media.AudioRecord;
+import android.media.MediaRecorder;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -26,6 +29,91 @@ final class Stt {
     private final Handler main = new Handler(Looper.getMainLooper());
     private SpeechRecognizer sr;
     private Cb cur;
+
+    /** When true, the microphone is also captured for voice-ID while the recognizer listens. */
+    volatile boolean capture;
+    private AudioRecord rec;
+    private Thread recThread;
+    private volatile boolean recOn;
+    private final short[] ring = new short[16000 * 15];
+    private int ringLen;
+    private short[] lastAudio;
+
+    /** Audio of the last listening session (16 kHz mono), or null. */
+    synchronized short[] takeAudio() {
+        short[] a = lastAudio;
+        lastAudio = null;
+        return a;
+    }
+
+    private void startCapture() {
+        stopCapture();
+        synchronized (this) {
+            lastAudio = null;
+        }
+        if (!capture || ctx.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) return;
+        try {
+            int min = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
+            final AudioRecord r = new AudioRecord(MediaRecorder.AudioSource.MIC, 16000, AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT, Math.max(min, 16000));
+            if (r.getState() != AudioRecord.STATE_INITIALIZED) {
+                r.release();
+                return;
+            }
+            r.startRecording();
+            rec = r;
+            recOn = true;
+            ringLen = 0;
+            recThread = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    short[] buf = new short[2048];
+                    while (recOn) {
+                        int n = r.read(buf, 0, buf.length);
+                        if (n <= 0) break;
+                        synchronized (ring) {
+                            if (ringLen + n > ring.length) {
+                                int drop = ringLen + n - ring.length;
+                                System.arraycopy(ring, drop, ring, 0, ringLen - drop);
+                                ringLen -= drop;
+                            }
+                            System.arraycopy(buf, 0, ring, ringLen, n);
+                            ringLen += n;
+                        }
+                    }
+                }
+            });
+            recThread.start();
+        } catch (Exception e) {
+            rec = null;
+        }
+    }
+
+    private void stopCapture() {
+        AudioRecord r = rec;
+        if (r == null) return;
+        recOn = false;
+        rec = null;
+        try {
+            r.stop();
+        } catch (Exception ignored) {
+        }
+        try {
+            if (recThread != null) recThread.join(300);
+        } catch (InterruptedException ignored) {
+        }
+        try {
+            r.release();
+        } catch (Exception ignored) {
+        }
+        synchronized (ring) {
+            short[] snap = java.util.Arrays.copyOf(ring, ringLen);
+            synchronized (this) {
+                lastAudio = snap;
+            }
+        }
+    }
 
     Stt(Context ctx) {
         this.ctx = ctx;
@@ -53,6 +141,7 @@ final class Stt {
         i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1600L);
         try {
             sr.startListening(i);
+            startCapture();
         } catch (Exception e) {
             Cb c = cur;
             cur = null;
@@ -63,6 +152,7 @@ final class Stt {
 
     void cancel() {
         cur = null;
+        stopCapture();
         if (sr != null) {
             try {
                 sr.cancel();
@@ -73,6 +163,7 @@ final class Stt {
 
     void destroy() {
         cur = null;
+        stopCapture();
         if (sr != null) {
             try {
                 sr.destroy();
@@ -105,6 +196,7 @@ final class Stt {
 
         @Override
         public void onResults(Bundle results) {
+            stopCapture();
             Cb c = cur;
             cur = null;
             if (c == null) return;
@@ -115,6 +207,7 @@ final class Stt {
 
         @Override
         public void onError(int error) {
+            stopCapture();
             Cb c = cur;
             cur = null;
             if (error == SpeechRecognizer.ERROR_CLIENT || error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) {

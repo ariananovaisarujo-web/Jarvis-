@@ -23,6 +23,9 @@ final class Prefs {
         return (m.isEmpty() || m.equals("gemini-3.8-flash")) ? "gemini-3.5-flash" : m;
     }
 
+    boolean speakerOn() { return sp.getBoolean("speakerOn", true); }
+    float voiceThreshold() { return sp.getFloat("voiceThr", 0.40f); }
+
     boolean neuralOn() { return sp.getBoolean("neuralOn", true); }
 
     String name() { return sp.getString("name", "sir").trim(); }

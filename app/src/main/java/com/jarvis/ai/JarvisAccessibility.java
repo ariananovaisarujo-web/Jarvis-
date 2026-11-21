@@ -54,6 +54,16 @@ public class JarvisAccessibility extends AccessibilityService {
         return performGlobalAction(action);
     }
 
+    /** Swipes up from the lower part of the screen (opens the lock screen's PIN pad). */
+    boolean swipeUp() {
+        android.util.DisplayMetrics m = getResources().getDisplayMetrics();
+        Path p = new Path();
+        p.moveTo(m.widthPixels / 2f, m.heightPixels * 0.85f);
+        p.lineTo(m.widthPixels / 2f, m.heightPixels * 0.30f);
+        GestureDescription.StrokeDescription sd = new GestureDescription.StrokeDescription(p, 0, 300);
+        return dispatchGesture(new GestureDescription.Builder().addStroke(sd).build(), null, null);
+    }
+
     // ------------------------------------------------------------------ tap
 
     String tap(String text) {
