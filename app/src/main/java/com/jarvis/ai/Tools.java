@@ -151,6 +151,10 @@ final class Tools {
                 J.obj("city", s("City name. Leave empty for the user's home city."))));
         a.put(fn("bluetooth", "Turn Bluetooth on or off, or list paired/connected devices. Use this instead of open_settings for Bluetooth requests.",
                 J.obj("action", en("What to do", "on", "off", "status")), "action"));
+        a.put(fn("wifi", "Turn Wi-Fi on or off, or check its status. Use this instead of open_settings for Wi-Fi requests.",
+                J.obj("action", en("What to do", "on", "off", "status")), "action"));
+        a.put(fn("hotspot", "Turn the mobile Wi-Fi hotspot (tethering) on or off, or check its status.",
+                J.obj("action", en("What to do", "on", "off", "status")), "action"));
         a.put(fn("open_settings", "Open a phone settings screen.",
                 J.obj("page", en("Which screen", "wifi", "bluetooth", "display", "sound", "battery",
                         "location", "apps", "airplane", "main")), "page"));
@@ -342,6 +346,10 @@ final class Tools {
             }
             case "bluetooth":
                 return bluetooth(a.optString("action"));
+            case "wifi":
+                return wifi(a.optString("action"));
+            case "hotspot":
+                return hotspot(a.optString("action"));
             case "volume":
                 return volume(a);
             case "battery_status":
@@ -695,6 +703,80 @@ final class Tools {
                 || status == BatteryManager.BATTERY_STATUS_FULL;
         int pct = scale > 0 ? Math.round(level * 100f / scale) : level;
         return "Battery is at " + pct + " percent" + (charging ? " and charging." : ", not charging.");
+    }
+
+    /**
+     * Android 10+ blocks apps from toggling Wi-Fi / hotspot directly, so when the direct API is
+     * refused this opens the right settings screen and taps the switch through accessibility,
+     * same trick used for PIN unlock.
+     */
+    private String toggleViaScreen(String settingsAction, String[] labels, String action, String what) {
+        launch(new Intent(settingsAction));
+        JarvisAccessibility svc = JarvisAccessibility.get();
+        if (svc == null) {
+            return "Opened " + what + " settings. " + A11Y_OFF + " For now the user must flip the switch.";
+        }
+        try {
+            Thread.sleep(900);
+        } catch (InterruptedException ignored) {
+        }
+        boolean tapped = svc.tapExact(labels);
+        if (!tapped) {
+            try {
+                Thread.sleep(700);
+            } catch (InterruptedException ignored) {
+            }
+            tapped = svc.tapExact(labels);
+        }
+        return tapped ? "Turning " + what + " " + action + "."
+                : "Opened " + what + " settings but could not find the switch. Please tap it.";
+    }
+
+    @android.annotation.SuppressLint("MissingPermission")
+    private String wifi(String action) {
+        android.net.wifi.WifiManager wm = (android.net.wifi.WifiManager) c.getApplicationContext()
+                .getSystemService(Context.WIFI_SERVICE);
+        if (wm == null) return "This device has no Wi-Fi.";
+        if ("status".equals(action)) {
+            return wm.isWifiEnabled() ? "Wi-Fi is on." : "Wi-Fi is off.";
+        }
+        boolean turnOn = "on".equals(action);
+        if (wm.isWifiEnabled() == turnOn) return "Wi-Fi is already " + action + ".";
+        if (Build.VERSION.SDK_INT < 29) {
+            try {
+                if (wm.setWifiEnabled(turnOn)) return "Turning Wi-Fi " + action + ".";
+            } catch (Exception ignored) {
+            }
+        }
+        return toggleViaScreen(Settings.ACTION_WIFI_SETTINGS,
+                new String[]{"Wi-Fi", "Wi‑Fi", "WiFi", "Use Wi-Fi"}, action, "Wi-Fi");
+    }
+
+    private String hotspot(String action) {
+        boolean on = isHotspotOn();
+        if ("status".equals(action)) {
+            return on == null ? "Could not read the hotspot state." : (on ? "Hotspot is on." : "Hotspot is off.");
+        }
+        boolean turnOn = "on".equals(action);
+        if (on != null && on == turnOn) return "Hotspot is already " + action + ".";
+        return toggleViaScreen("android.settings.TETHER_SETTINGS",
+                new String[]{"Wi-Fi hotspot", "Wi‑Fi hotspot", "Hotspot", "Portable Wi-Fi hotspot",
+                        "Portable Wi‑Fi hotspot", "Mobile Hotspot", "Use Wi-Fi hotspot"},
+                action, "the hotspot");
+    }
+
+    /** Hidden API read-only check; returns null if it cannot be read. */
+    private Boolean isHotspotOn() {
+        try {
+            android.net.wifi.WifiManager wm = (android.net.wifi.WifiManager) c.getApplicationContext()
+                    .getSystemService(Context.WIFI_SERVICE);
+            if (wm == null) return null;
+            java.lang.reflect.Method m = wm.getClass().getMethod("isWifiApEnabled");
+            m.setAccessible(true);
+            return (Boolean) m.invoke(wm);
+        } catch (Throwable t) {
+            return null;
+        }
     }
 
     @android.annotation.SuppressLint("MissingPermission")
