@@ -753,7 +753,7 @@ final class Tools {
     }
 
     private String hotspot(String action) {
-        boolean on = isHotspotOn();
+        Boolean on = isHotspotOn();
         if ("status".equals(action)) {
             return on == null ? "Could not read the hotspot state." : (on ? "Hotspot is on." : "Hotspot is off.");
         }
