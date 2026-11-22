@@ -149,6 +149,8 @@ final class Tools {
         a.put(fn("current_time", "Get the current date and time.", null));
         a.put(fn("weather", "Get the current weather and today's forecast for a city.",
                 J.obj("city", s("City name. Leave empty for the user's home city."))));
+        a.put(fn("bluetooth", "Turn Bluetooth on or off, or list paired/connected devices. Use this instead of open_settings for Bluetooth requests.",
+                J.obj("action", en("What to do", "on", "off", "status")), "action"));
         a.put(fn("open_settings", "Open a phone settings screen.",
                 J.obj("page", en("Which screen", "wifi", "bluetooth", "display", "sound", "battery",
                         "location", "apps", "airplane", "main")), "page"));
@@ -338,6 +340,8 @@ final class Tools {
                 }
                 return "Navigating to " + d + ".";
             }
+            case "bluetooth":
+                return bluetooth(a.optString("action"));
             case "volume":
                 return volume(a);
             case "battery_status":
@@ -691,6 +695,47 @@ final class Tools {
                 || status == BatteryManager.BATTERY_STATUS_FULL;
         int pct = scale > 0 ? Math.round(level * 100f / scale) : level;
         return "Battery is at " + pct + " percent" + (charging ? " and charging." : ", not charging.");
+    }
+
+    @android.annotation.SuppressLint("MissingPermission")
+    private String bluetooth(String action) {
+        android.bluetooth.BluetoothManager bm =
+                (android.bluetooth.BluetoothManager) c.getSystemService(Context.BLUETOOTH_SERVICE);
+        android.bluetooth.BluetoothAdapter ad = bm == null ? null : bm.getAdapter();
+        if (ad == null) return "This device has no Bluetooth.";
+        if (Build.VERSION.SDK_INT >= 31
+                && c.checkSelfPermission("android.permission.BLUETOOTH_CONNECT") != PackageManager.PERMISSION_GRANTED) {
+            return "I need the Bluetooth permission, sir. Open the app once and allow it.";
+        }
+        switch (action) {
+            case "on":
+                if (ad.isEnabled()) return "Bluetooth is already on.";
+                ad.enable();
+                return "Turning Bluetooth on.";
+            case "off":
+                if (!ad.isEnabled()) return "Bluetooth is already off.";
+                ad.disable();
+                return "Turning Bluetooth off.";
+            case "status":
+            default:
+                if (!ad.isEnabled()) return "Bluetooth is off.";
+                Set<android.bluetooth.BluetoothDevice> paired = ad.getBondedDevices();
+                List<String> connected = new java.util.ArrayList<>();
+                List<String> names = new java.util.ArrayList<>();
+                for (android.bluetooth.BluetoothDevice d : paired) {
+                    String n = d.getName() == null ? d.getAddress() : d.getName();
+                    names.add(n);
+                    try {
+                        java.lang.reflect.Method m = d.getClass().getMethod("isConnected");
+                        if (Boolean.TRUE.equals(m.invoke(d))) connected.add(n);
+                    } catch (Exception ignored) {
+                    }
+                }
+                if (names.isEmpty()) return "Bluetooth is on. No paired devices.";
+                String base = "Bluetooth is on. Paired: " + String.join(", ", names) + ".";
+                return connected.isEmpty() ? base + " Nothing currently connected."
+                        : base + " Connected now: " + String.join(", ", connected) + ".";
+        }
     }
 
     private String openSettings(String page) {

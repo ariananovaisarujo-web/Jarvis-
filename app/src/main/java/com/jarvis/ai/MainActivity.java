@@ -43,11 +43,14 @@ public class MainActivity extends Activity implements Jarvis.Listener {
                 android.Manifest.permission.READ_CONTACTS,
                 android.Manifest.permission.CALL_PHONE,
                 android.Manifest.permission.SEND_SMS,
-                "android.permission.POST_NOTIFICATIONS"
+                "android.permission.POST_NOTIFICATIONS",
+                "android.permission.BLUETOOTH_CONNECT",
+                "android.permission.BLUETOOTH_SCAN"
         };
         List<String> need = new ArrayList<>();
         for (String p : all) {
             if (p.endsWith("POST_NOTIFICATIONS") && Build.VERSION.SDK_INT < 33) continue;
+            if ((p.endsWith("BLUETOOTH_CONNECT") || p.endsWith("BLUETOOTH_SCAN")) && Build.VERSION.SDK_INT < 31) continue;
             if (a.checkSelfPermission(p) != PackageManager.PERMISSION_GRANTED) need.add(p);
         }
         if (!need.isEmpty()) a.requestPermissions(need.toArray(new String[0]), 1);
